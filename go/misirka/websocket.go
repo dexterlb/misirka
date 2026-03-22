@@ -37,21 +37,10 @@ func (m *Misirka) websocketHandler(w http.ResponseWriter, req *http.Request) {
 
 		err = m.handleWebsocketMsg(ws, msg)
 		if err != nil {
-			resp := &rpcError{
-				JsonRPC: "2.0",
-				MErr: MErr{
-					Err:  err,
-					Code: -32700,
-				},
-			}
-			respBytes, err := json.Marshal(resp)
-			if err != nil {
-				m.errHandler(fmt.Errorf("could not encode error: %w", err))
-			}
-			err = ws.WriteMessage(websocket.TextMessage, respBytes)
-			if err != nil {
-				m.errHandler(fmt.Errorf("could not write error to websocket: %w", err))
-			}
+			m.respondWithErr(ws, &MErr{
+				Err:  err,
+				Code: -37000,
+			})
 		}
 	}
 }
@@ -65,6 +54,21 @@ type rpcMessage struct {
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
 	ID     uint64          `json:"id"`
+}
+
+func (m *Misirka) respondWithErr(ws *websocket.Conn, merr *MErr) {
+	resp := &rpcError{
+		JsonRPC: "2.0",
+		MErr:    *merr,
+	}
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		m.errHandler(fmt.Errorf("could not encode error: %w", err))
+	}
+	err = ws.WriteMessage(websocket.TextMessage, respBytes)
+	if err != nil {
+		m.errHandler(fmt.Errorf("could not write error to websocket: %w", err))
+	}
 }
 
 func (m *Misirka) handleWebsocketMsg(ws *websocket.Conn, message []byte) error {
