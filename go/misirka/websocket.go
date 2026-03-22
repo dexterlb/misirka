@@ -41,9 +41,9 @@ func (m *Misirka) websocketHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 type rpcResponse struct {
-	ID      *uint64 `json:"id"`
-	Result  interface{}
-	JsonRPC string `json:"jsonrpc"`
+	ID      *uint64     `json:"id"`
+	Result  interface{} `json:"result"`
+	JsonRPC string      `json:"jsonrpc"`
 }
 
 type rpcError struct {
@@ -227,6 +227,14 @@ func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []b
 		if method == "ms-unsubscribe" {
 			m.handleUnsubscribe(ws, topics, id)
 		}
+		return
+	}
+
+	if method == "ms-ping" {
+		if paramData == nil {
+			paramData = []byte("\"pong\"")
+		}
+		m.respond(ws, id, json.RawMessage(paramData))
 		return
 	}
 
