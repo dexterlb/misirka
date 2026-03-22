@@ -121,20 +121,59 @@ func (m *Misirka) handleSubscribe(ws *websocket.Conn, topics []string, id *uint6
 	m.subscriptionMutex.Lock()
 	defer m.subscriptionMutex.Unlock()
 
+	if !m.checkTopicList(ws, id, topics) {
+		return
+	}
+	for _, topic := range topics {
+		tinfo := m.topics[topic]
+		tinfo.WSSubscribers[ws] = struct{}{}
+		if tinfo.LastVal != nil {
+			wsmsg := &pubMsg{
+				Topic: topic,
+				Msg:   tinfo.LastVal,
+			}
+			mdata, err := json.Marshal(wsmsg)
+			if err != nil {
+				m.errHandler(fmt.Errorf("could not encode websocket message", err))
+				continue
+			}
+			err = ws.WriteMessage(websocket.TextMessage, mdata)
+			if err != nil {
+				m.errHandler(fmt.Errorf("could not write message to websocket (topic %s): %w", topic, err))
+			}
+		}
+	}
+	m.respond(ws, id, "ok")
+}
+
+func (m *Misirka) handleUnsubscribe(ws *websocket.Conn, topics []string, id *uint64) {
+	m.subscriptionMutex.Lock()
+	defer m.subscriptionMutex.Unlock()
+
+	if !m.checkTopicList(ws, id, topics) {
+		return
+	}
+
+	for _, topic := range topics {
+		tinfo := m.topics[topic]
+		if _, ok := tinfo.WSSubscribers[ws]; ok {
+			delete(tinfo.WSSubscribers, ws)
+		}
+	}
+	m.respond(ws, id, "ok")
+}
+
+func (m *Misirka) checkTopicList(ws *websocket.Conn, id *uint64, topics []string) bool {
 	for _, topic := range topics {
 		if _, ok := m.topics[topic]; !ok {
 			m.respondWithErr(ws, id, &MErr{
 				Err:  fmt.Errorf("topic %s is not available for subscribing", topic),
 				Code: -37000,
 			})
-			return
+			return false
 		}
 	}
-	for _, topic := range topics {
-		tinfo := m.topics[topic]
-		tinfo.WSSubscribers[ws] = struct{}{}
-	}
-	m.respond(ws, id, "ok")
+	return true
 }
 
 func (m *Misirka) unsubscribeWS(ws *websocket.Conn) {
@@ -173,17 +212,36 @@ func (m *Misirka) publishToWebsockets(topic string, msg []byte) {
 	}
 }
 
-func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, data []byte, id *uint64) {
-	if method == "ms-subscribe" {
+func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []byte, id *uint64) {
+	if method == "ms-subscribe" || method == "ms-unsubscribe" {
 		var topics []string
-		if err := json.Unmarshal(data, &topics); err != nil {
+		if err := json.Unmarshal(paramData, &topics); err != nil {
 			m.respondWithErr(ws, id, &MErr{
 				Err:  fmt.Errorf("could not parse params as list of topics: %w", err),
 				Code: -37000,
 			})
 		}
-		m.handleSubscribe(ws, topics, id)
+		if method == "ms-subscribe" {
+			m.handleSubscribe(ws, topics, id)
+		}
+		if method == "ms-unsubscribe" {
+			m.handleUnsubscribe(ws, topics, id)
+		}
 		return
 	}
-	panic("not implemented")
+
+	handler, ok := m.rawJsonHandlers[method]
+	if !ok {
+		m.respondWithErr(ws, id, &MErr{
+			Err:  fmt.Errorf("no such method: %s", method),
+			Code: -37000,
+		})
+		return
+	}
+	respData, merr := handler(paramData)
+	if merr != nil {
+		m.respondWithErr(ws, id, merr)
+		return
+	}
+	m.respond(ws, id, respData)
 }

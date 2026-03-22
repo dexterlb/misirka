@@ -16,6 +16,8 @@ type Misirka struct {
 
 	prefix string
 
+	rawJsonHandlers map[string](func(json.RawMessage) (json.RawMessage, *MErr))
+
 	topics            map[string]*topicInfo
 	subscriptionMutex sync.Mutex
 }
@@ -25,6 +27,7 @@ func New(prefix string, errHandler func(error)) *Misirka {
 	m.prefix = prefix
 	m.mux = http.NewServeMux()
 	m.errHandler = errHandler
+	m.rawJsonHandlers = make(map[string](func(json.RawMessage) (json.RawMessage, *MErr)))
 	m.topics = make(map[string]*topicInfo)
 	m.mux.HandleFunc(fmt.Sprintf("%sws", m.prefix), m.websocketHandler)
 	return m
@@ -40,6 +43,13 @@ type Callee[P any, R any] func(param P) (R, *MErr)
 
 func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
 	assertPath(path)
+	if _, ok := m.rawJsonHandlers[path]; ok {
+		panic(fmt.Sprintf("HandleCall called twice for path %s", path))
+	}
+
+	m.rawJsonHandlers[path] = func(param json.RawMessage) (json.RawMessage, *MErr) {
+		return rawJsonHandler(m, callee, param)
+	}
 	fullPath := fmt.Sprintf("%s%s", m.prefix, path)
 	m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		httpCallHandler(m, callee, w, req)
@@ -76,22 +86,41 @@ type getArgs struct {
 	// TODO: let the caller issue options here
 }
 
-type rawJson struct {
-	data []byte
-}
-
-func (r *rawJson) MarshalJSON() ([]byte, error) {
-	return r.data, nil
-}
-
 func (m *Misirka) AddTopic(path string) {
 	assertPath(path)
 	m.topics[path] = &topicInfo{
 		WSSubscribers: make(map[*websocket.Conn]struct{}),
 	}
-	HandleCall(m, path, func(args *getArgs) (*rawJson, *MErr) {
-		return &rawJson{data: m.topics[path].LastVal}, nil
+	HandleCall(m, path, func(args *getArgs) (json.RawMessage, *MErr) {
+		return json.RawMessage(m.topics[path].LastVal), nil
 	})
+}
+
+func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, *MErr) {
+	var param P
+
+	err := json.Unmarshal(paramData, &param)
+	if err != nil {
+		return nil, &MErr{
+			Code: -32700,
+			Err:  fmt.Errorf("could not read request body: %w", err),
+		}
+	}
+
+	result, merr := callee(param)
+	if merr != nil {
+		return nil, merr
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		return nil, &MErr{
+			Code: -32700,
+			Err:  fmt.Errorf("could not encode response: %w", err),
+		}
+	}
+
+	return data, nil
 }
 
 func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.ResponseWriter, req *http.Request) {
