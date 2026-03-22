@@ -1,10 +1,13 @@
 package misirka
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/goccy/go-json"
+	"github.com/gorilla/websocket"
 )
 
 type Misirka struct {
@@ -13,7 +16,8 @@ type Misirka struct {
 
 	prefix string
 
-	topics map[string]*topicInfo
+	topics            map[string]*topicInfo
+	subscriptionMutex sync.Mutex
 }
 
 func New(prefix string, errHandler func(error)) *Misirka {
@@ -27,7 +31,9 @@ func New(prefix string, errHandler func(error)) *Misirka {
 }
 
 type topicInfo struct {
-	LastVal []byte
+	LastVal       []byte
+	WSSubscribers map[*websocket.Conn]struct{}
+	pubMutex      sync.Mutex
 }
 
 type Callee[P any, R any] func(param P) (R, *MErr)
@@ -51,7 +57,15 @@ func Publish[P any](m *Misirka, path string, item P) {
 		m.errHandler(fmt.Errorf("trying to publish to topic %s but the value failed to encode: %w", path, err))
 		return
 	}
+
+	info.pubMutex.Lock()
+	defer info.pubMutex.Unlock()
+
+	if bytes.Equal(info.LastVal, data) {
+		return
+	}
 	info.LastVal = data
+	m.publishToWebsockets(path, data)
 }
 
 func (m *Misirka) Handler() http.Handler {
@@ -72,7 +86,9 @@ func (r *rawJson) MarshalJSON() ([]byte, error) {
 
 func (m *Misirka) AddTopic(path string) {
 	assertPath(path)
-	m.topics[path] = &topicInfo{}
+	m.topics[path] = &topicInfo{
+		WSSubscribers: make(map[*websocket.Conn]struct{}),
+	}
 	HandleCall(m, path, func(args *getArgs) (*rawJson, *MErr) {
 		return &rawJson{data: m.topics[path].LastVal}, nil
 	})
