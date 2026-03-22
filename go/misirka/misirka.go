@@ -1,9 +1,10 @@
 package misirka
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/goccy/go-json"
 )
 
 type Misirka struct {
@@ -21,6 +22,7 @@ func New(prefix string, errHandler func(error)) *Misirka {
 	m.mux = http.NewServeMux()
 	m.errHandler = errHandler
 	m.topics = make(map[string]*topicInfo)
+	m.mux.HandleFunc(fmt.Sprintf("%sws", m.prefix), m.websocketHandler)
 	return m
 }
 
@@ -77,9 +79,6 @@ func (m *Misirka) AddTopic(path string) {
 }
 
 func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.ResponseWriter, req *http.Request) {
-	parser := m.parsers.Get()
-	defer m.parsers.Put(parser)
-
 	w.Header().Set("Content-Type", "application/json")
 
 	var param P
@@ -87,7 +86,7 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 	switch req.Method {
 	case "POST":
 		dec := json.NewDecoder(req.Body)
-		err := dec.Decode(param)
+		err := dec.Decode(&param)
 		if err != nil {
 			m.writeError(w, &MErr{
 				Code: -32700,
@@ -103,7 +102,10 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 		enc := json.NewEncoder(w)
 		err = enc.Encode(result)
 		if err != nil {
-			m.errHandler(fmt.Errorf("could not write response: %w", err))
+			m.writeError(w, &MErr{
+				Code: -32700,
+				Err:  fmt.Errorf("could not encode data: %w", err),
+			})
 			return
 		}
 	case "GET":
@@ -120,7 +122,7 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 				paramMap[k] = vals[0]
 			}
 			paramJson, _ := json.Marshal(paramMap)
-			err := json.Unmarshal(paramJson, param)
+			err := json.Unmarshal(paramJson, &param)
 			if err != nil {
 				m.errHandler(fmt.Errorf("could not decode stringmap from URL query: %w", err))
 				return
