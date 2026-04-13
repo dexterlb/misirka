@@ -1,0 +1,9 @@
+{
+  "name": "misirka",
+  "version": "0.1.0",
+  "main": "./ts/index.ts",
+  "exports": {
+    ".": "./ts/index.ts"
+  },
+  "type": "module"
+}
