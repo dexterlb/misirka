@@ -47,7 +47,7 @@ type rpcResponse struct {
 }
 
 type rpcError struct {
-	MErr    `json:"error"`
+	MErr    MErr    `json:"error"`
 	ID      *uint64 `json:"id"`
 	JsonRPC string  `json:"jsonrpc"`
 }
@@ -83,6 +83,7 @@ func (m *Misirka) respondWithErr(ws *websocket.Conn, id *uint64, merr *MErr) {
 	resp := &rpcError{
 		JsonRPC: "2.0",
 		MErr:    *merr,
+		ID:      id,
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
@@ -235,6 +236,25 @@ func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []b
 			paramData = []byte("\"pong\"")
 		}
 		m.respond(ws, id, json.RawMessage(paramData))
+		return
+	}
+
+	if method == "ms-get" {
+		var topic string
+		if err := json.Unmarshal(paramData, &topic); err != nil {
+			m.respondWithErr(ws, id, &MErr{
+				Err:  fmt.Errorf("could not parse params as a single string (topic): %w", err),
+				Code: -37000,
+			})
+		}
+		tinfo, ok := m.topics[topic]
+		if !ok {
+			m.respondWithErr(ws, id, &MErr{
+				Err:  fmt.Errorf("topic %s is not available", topic),
+				Code: -37000,
+			})
+		}
+		m.respond(ws, id, json.RawMessage(tinfo.LastVal))
 		return
 	}
 

@@ -162,6 +162,14 @@ export class WSClient {
     }
   }
 
+  async get<T>(topic: string, schema: Schema<T>): Promise<T> {
+    return await this.request('ms-get', topic, schema);
+  }
+
+  async get_unsafe(topic: string): Promise<any> {
+    return await this.request_unsafe('ms-get', topic);
+  }
+
   async request<T>(method: string, params: any, resp_schema: Schema<T>): Promise<T> {
     const resp = await this.request_unsafe(method, params);
     return resp_schema.parse(resp);

@@ -33,26 +33,13 @@ func New(prefix string, errHandler func(error)) *Misirka {
 	return m
 }
 
-type topicInfo struct {
-	LastVal       []byte
-	WSSubscribers map[*websocket.Conn]struct{}
-	pubMutex      sync.Mutex
-}
-
-type Callee[P any, R any] func(param P) (R, *MErr)
-
-func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
+func (m *Misirka) AddTopic(path string) {
 	assertPath(path)
-	if _, ok := m.rawJsonHandlers[path]; ok {
-		panic(fmt.Sprintf("HandleCall called twice for path %s", path))
+	m.topics[path] = &topicInfo{
+		WSSubscribers: make(map[*websocket.Conn]struct{}),
 	}
-
-	m.rawJsonHandlers[path] = func(param json.RawMessage) (json.RawMessage, *MErr) {
-		return rawJsonHandler(m, callee, param)
-	}
-	fullPath := fmt.Sprintf("%s%s", m.prefix, path)
-	m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
-		httpCallHandler(m, callee, w, req)
+	handleCallHttp(m, path, func(args *getArgs) (json.RawMessage, *MErr) {
+		return json.RawMessage(m.topics[path].LastVal), nil
 	})
 }
 
@@ -78,22 +65,40 @@ func Publish[P any](m *Misirka, path string, item P) {
 	m.publishToWebsockets(path, data)
 }
 
+type Callee[P any, R any] func(param P) (R, *MErr)
+
+func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
+	assertPath(path)
+	if _, ok := m.rawJsonHandlers[path]; ok {
+		panic(fmt.Sprintf("HandleCall called twice for path %s", path))
+	}
+
+	m.rawJsonHandlers[path] = func(param json.RawMessage) (json.RawMessage, *MErr) {
+		return rawJsonHandler(m, callee, param)
+	}
+
+	handleCallHttp(m, path, callee)
+}
+
 func (m *Misirka) Handler() http.Handler {
 	return m.mux
+}
+
+func handleCallHttp[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
+	fullPath := fmt.Sprintf("%s%s", m.prefix, path)
+	m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
+		httpCallHandler(m, callee, w, req)
+	})
 }
 
 type getArgs struct {
 	// TODO: let the caller issue options here
 }
 
-func (m *Misirka) AddTopic(path string) {
-	assertPath(path)
-	m.topics[path] = &topicInfo{
-		WSSubscribers: make(map[*websocket.Conn]struct{}),
-	}
-	HandleCall(m, path, func(args *getArgs) (json.RawMessage, *MErr) {
-		return json.RawMessage(m.topics[path].LastVal), nil
-	})
+type topicInfo struct {
+	LastVal       []byte
+	WSSubscribers map[*websocket.Conn]struct{}
+	pubMutex      sync.Mutex
 }
 
 func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, *MErr) {
