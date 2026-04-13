@@ -30,6 +30,10 @@ interface Error {
   code: number;
 }
 
+interface Schema<T> {
+  parse: (val: any) => T
+}
+
 export class WSClient {
   constructor(
     private ws_url: string,
@@ -93,7 +97,12 @@ export class WSClient {
     }
   }
 
-  async request(method: string, params: any): Promise<any> {
+  async request<T>(method: string, params: any, resp_schema: Schema<T>): Promise<T> {
+    const resp = await this.request_unsafe(method, params);
+    return resp_schema.parse(resp);
+  }
+
+  async request_unsafe(method: string, params: any): Promise<any> {
     const id = this.last_id;
     this.last_id++;
     const resp = await this.request_raw({
