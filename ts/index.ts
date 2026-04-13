@@ -31,94 +31,26 @@ interface Error {
 }
 
 interface Schema<T> {
-  parse: (val: any) => T
+  parse: (val: any) => T;
 }
 
-export class WSClient {
+export interface MisirkaClient {
+  subscribe<T>(topics: string[], msg_schema: Schema<T>, handler: (msg: T) => void): Promise<void>;
+  subscribe_unsafe(topics: string[], handler: (topic: string, msg: any) => void): Promise<void>;
+  unsubscribe(topics: string[]): Promise<void>;
+  get<T>(topic: string, schema: Schema<T>): Promise<T>;
+  get_unsafe(topic: string): Promise<any>;
+  request<T>(method: string, params: any, resp_schema: Schema<T>): Promise<T>;
+  request_unsafe(method: string, params: any): Promise<any>;
+}
+
+export class WSClient implements MisirkaClient {
   constructor(
     private ws_url: string,
     private on_connect: () => void,
     private on_disconnect: () => void,
   ) {
     this.init();
-  }
-
-  private init(): void {
-    this.ws = new WebSocket(this.ws_url);
-    this.resp_handlers = new Map();
-    this.subscribers = new Map();
-
-    this.ws.onopen = () => {
-      console.log("WebSocket connected!");
-      this.on_connect();
-    };
-
-    this.ws.onclose = () => {
-      console.log("WebSocket disconnected, trying to reconnect");
-      setTimeout(() => this.init(), 1000);
-      this.on_disconnect();
-    };
-
-    this.ws.onerror = (err) => console.error("WebSocket error:", err);
-
-    this.ws.onmessage = (event) => {
-      this.handle_msg(event.data);
-    };
-  }
-
-  private handle_msg(data: string) {
-    const resp = parseResponse(data);
-    if (resp !== null) {
-      this.handle_resp(resp);
-      return;
-    }
-
-    const err = parseError(data);
-    if (err !== null) {
-      this.handle_err(err);
-      return;
-    }
-
-    const pubmsg = parsePubMsg(data);
-    if (pubmsg !== null) {
-      this.handle_pubmsg(pubmsg);
-      return;
-    }
-
-    console.error(
-      `received unwanted data on websocket: ${data}`
-    );
-  }
-
-  private handle_resp(resp: Response) {
-    const resp_handler = this.pop_resp_handler(resp.id);
-    if (resp_handler !== undefined) {
-      resp_handler.resolve(resp);
-    } else {
-      console.error(
-        `received response ${resp} but I don't have a matching request`,
-      );
-    }
-  }
-
-  private handle_err(err: ErrorResult) {
-    const resp_handler = this.pop_resp_handler(err.id);
-    if (resp_handler !== undefined) {
-      resp_handler.reject(err.error);
-    } else {
-      console.error(`received error ${err.error} but I don't have a matching request`);
-    }
-  }
-
-  private handle_pubmsg(pubmsg: PubMsg) {
-    const subscribers = this.subscribers.get(pubmsg.topic);
-    if (subscribers === undefined) {
-      console.error(`no subscribers for topic ${pubmsg.topic}`);
-      return;
-    }
-    for (const sub of subscribers) {
-      sub(pubmsg.topic, pubmsg.msg);
-    }
   }
 
   async subscribe<T>(topics: string[], msg_schema: Schema<T>, handler: (msg: T) => void) {
@@ -217,6 +149,84 @@ export class WSClient {
         },
       });
     });
+  }
+
+  private init(): void {
+    this.ws = new WebSocket(this.ws_url);
+    this.resp_handlers = new Map();
+    this.subscribers = new Map();
+
+    this.ws.onopen = () => {
+      console.log("WebSocket connected!");
+      this.on_connect();
+    };
+
+    this.ws.onclose = () => {
+      console.log("WebSocket disconnected, trying to reconnect");
+      setTimeout(() => this.init(), 1000);
+      this.on_disconnect();
+    };
+
+    this.ws.onerror = (err) => console.error("WebSocket error:", err);
+
+    this.ws.onmessage = (event) => {
+      this.handle_msg(event.data);
+    };
+  }
+
+  private handle_msg(data: string) {
+    const resp = parseResponse(data);
+    if (resp !== null) {
+      this.handle_resp(resp);
+      return;
+    }
+
+    const err = parseError(data);
+    if (err !== null) {
+      this.handle_err(err);
+      return;
+    }
+
+    const pubmsg = parsePubMsg(data);
+    if (pubmsg !== null) {
+      this.handle_pubmsg(pubmsg);
+      return;
+    }
+
+    console.error(
+      `received unwanted data on websocket: ${data}`
+    );
+  }
+
+  private handle_resp(resp: Response) {
+    const resp_handler = this.pop_resp_handler(resp.id);
+    if (resp_handler !== undefined) {
+      resp_handler.resolve(resp);
+    } else {
+      console.error(
+        `received response ${resp} but I don't have a matching request`,
+      );
+    }
+  }
+
+  private handle_err(err: ErrorResult) {
+    const resp_handler = this.pop_resp_handler(err.id);
+    if (resp_handler !== undefined) {
+      resp_handler.reject(err.error);
+    } else {
+      console.error(`received error ${err.error} but I don't have a matching request`);
+    }
+  }
+
+  private handle_pubmsg(pubmsg: PubMsg) {
+    const subscribers = this.subscribers.get(pubmsg.topic);
+    if (subscribers === undefined) {
+      console.error(`no subscribers for topic ${pubmsg.topic}`);
+      return;
+    }
+    for (const sub of subscribers) {
+      sub(pubmsg.topic, pubmsg.msg);
+    }
   }
 
   private pop_resp_handler(id: number | undefined): Resolver<Response> | undefined {
