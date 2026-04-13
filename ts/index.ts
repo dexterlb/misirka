@@ -16,13 +16,13 @@ interface PubMsg {
 }
 
 interface Resolver<T> {
-  resolve: (T) => void;
-  reject: (string) => void;
+  resolve: (val: T) => void;
+  reject: (err: any) => void;
 }
 
 interface ErrorResult {
   error: Error;
-  id: number?;
+  id?: number;
 }
 
 interface Error {
@@ -41,8 +41,7 @@ export class WSClient {
 
   private init(): void {
     this.ws = new WebSocket(this.ws_url);
-    this.msg_handler = null;
-    this.msg_handler_resolve = null;
+    this.resp_handlers = new Map();
 
     this.ws.onopen = () => {
       console.log("WebSocket connected!");
@@ -63,10 +62,11 @@ export class WSClient {
   }
 
   private handle_msg(data: string) {
-    resp = parseResponse(data);
+    const resp = parseResponse(data);
     if (resp !== null) {
-      if (resp.id in this.resp_handlers) {
-        this.resp_handlers[resp.id].resolve(resp);
+      const resp_handler = this.pop_resp_handler(resp.id);
+      if (resp_handler !== undefined) {
+        resp_handler.resolve(resp);
       } else {
         console.error(
           `received response ${resp} but I don't have a matching request`,
@@ -75,23 +75,28 @@ export class WSClient {
       return;
     }
 
-    err = parseError(data);
+    const err = parseError(data);
     if (err !== null) {
-      if ("id" in err && err.id in this.resp_handlers) {
-        this.resp_handlers[resp.id].reject(err.error);
+      const resp_handler = this.pop_resp_handler(err.id);
+      if (resp_handler !== undefined) {
+        resp_handler.reject(err.error);
       } else {
-        console.error(`received error ${err.error}`);
+        console.error(`received error ${err.error} but I don't have a matching request`);
       }
       return;
     }
 
-    // TODO: pubsub
+    const pubmsg = parsePubMsg(data);
+    if (pubmsg !== null) {
+      throw new Error("not implemented");
+      return;
+    }
   }
 
   async request(method: string, params: any): Promise<any> {
-    id = this.last_id;
+    const id = this.last_id;
     this.last_id++;
-    resp = await this.request_raw({
+    const resp = await this.request_raw({
       jsonrpc: "2.0",
       method: method,
       id: id,
@@ -105,24 +110,39 @@ export class WSClient {
     this.ws.send(JSON.stringify(req));
 
     return new Promise<Response>((resolve, reject) => {
-      timeout = setTimeout(() => {
+      const timeout = setTimeout(() => {
         reject(`Timeout ${req.id}`);
       }, 2000);
-      this.resp_handlers[req.id] = {
-        resolve: (x) => {
+      this.resp_handlers.set(req.id, {
+        resolve: (x: Response) => {
           clearTimeout(timeout);
           resolve(x);
         },
-        reject: (x) => {
+        reject: (x: any) => {
           clearTimeout(timeout);
           reject(x);
         },
-      };
+      });
     });
   }
 
+  private pop_resp_handler(id: number | undefined): Resolver<Response> | undefined {
+    if (id === undefined) {
+      return undefined;
+    }
+
+    const result = this.resp_handlers.get(id);
+    if (result === undefined) {
+      return undefined;
+    }
+    this.resp_handlers.delete(id);
+
+    return result;
+  }
+
   private ws!: WebSocket;
-  private resp_handlers: Map<number, Resolver<Response>>;
+  private resp_handlers: Map<number, Resolver<Response>> = new Map();
+  private last_id: number = 0;
 }
 
 function parseResponse(data: string): Response | null {
