@@ -238,25 +238,6 @@ func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []b
 		return
 	}
 
-	if method == "ms-get" {
-		var topic string
-		if err := json.Unmarshal(paramData, &topic); err != nil {
-			m.respondWithErr(ws, id, &MErr{
-				Err:  fmt.Errorf("could not parse params as a single string (topic): %w", err),
-				Code: -37000,
-			})
-		}
-		tinfo, ok := m.topics[topic]
-		if !ok {
-			m.respondWithErr(ws, id, &MErr{
-				Err:  fmt.Errorf("topic %s is not available", topic),
-				Code: -37000,
-			})
-		}
-		m.respond(ws, id, json.RawMessage(tinfo.LastVal))
-		return
-	}
-
 	handler, ok := m.rawJsonHandlers[method]
 	if !ok {
 		m.respondWithErr(ws, id, &MErr{
