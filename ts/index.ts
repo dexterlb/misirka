@@ -162,6 +162,17 @@ export class WSClient {
     }
   }
 
+  async unsubscribe(topics: string[]) {
+    const unsubscribe_resp = await this.request_unsafe("ms-unsubscribe", topics);
+    if (unsubscribe_resp !== "ok") {
+      throw new Error(`unsubscribe call returned '${JSON.stringify(unsubscribe_resp)}' instead of 'ok'`);
+    }
+
+    for (const topic of topics) {
+      this.subscribers.set(topic, []);
+    }
+  }
+
   async get<T>(topic: string, schema: Schema<T>): Promise<T> {
     return await this.request('ms-get', topic, schema);
   }
