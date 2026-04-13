@@ -46,6 +46,7 @@ export class WSClient {
   private init(): void {
     this.ws = new WebSocket(this.ws_url);
     this.resp_handlers = new Map();
+    this.subscribers = new Map();
 
     this.ws.onopen = () => {
       console.log("WebSocket connected!");
@@ -68,32 +69,96 @@ export class WSClient {
   private handle_msg(data: string) {
     const resp = parseResponse(data);
     if (resp !== null) {
-      const resp_handler = this.pop_resp_handler(resp.id);
-      if (resp_handler !== undefined) {
-        resp_handler.resolve(resp);
-      } else {
-        console.error(
-          `received response ${resp} but I don't have a matching request`,
-        );
-      }
+      this.handle_resp(resp);
       return;
     }
 
     const err = parseError(data);
     if (err !== null) {
-      const resp_handler = this.pop_resp_handler(err.id);
-      if (resp_handler !== undefined) {
-        resp_handler.reject(err.error);
-      } else {
-        console.error(`received error ${err.error} but I don't have a matching request`);
-      }
+      this.handle_err(err);
       return;
     }
 
     const pubmsg = parsePubMsg(data);
     if (pubmsg !== null) {
-      throw new Error("not implemented");
+      this.handle_pubmsg(pubmsg);
       return;
+    }
+
+    console.error(
+      `received unwanted data on websocket: ${data}`
+    );
+  }
+
+  private handle_resp(resp: Response) {
+    const resp_handler = this.pop_resp_handler(resp.id);
+    if (resp_handler !== undefined) {
+      resp_handler.resolve(resp);
+    } else {
+      console.error(
+        `received response ${resp} but I don't have a matching request`,
+      );
+    }
+  }
+
+  private handle_err(err: ErrorResult) {
+    const resp_handler = this.pop_resp_handler(err.id);
+    if (resp_handler !== undefined) {
+      resp_handler.reject(err.error);
+    } else {
+      console.error(`received error ${err.error} but I don't have a matching request`);
+    }
+  }
+
+  private handle_pubmsg(pubmsg: PubMsg) {
+    const subscribers = this.subscribers.get(pubmsg.topic);
+    if (subscribers === undefined) {
+      console.error(`no subscribers for topic ${pubmsg.topic}`);
+      return;
+    }
+    for (const sub of subscribers) {
+      sub(pubmsg.topic, pubmsg.msg);
+    }
+  }
+
+  async subscribe<T>(topics: string[], msg_schema: Schema<T>, handler: (msg: T) => void) {
+    const raw_handler = (topic: string, raw_msg: any) => {
+      var msg: T;
+      try {
+        msg = msg_schema.parse(raw_msg);
+      } catch (err) {
+        console.error(`received message of wrong type on topic '${topic}': `, err);
+        return;
+      };
+      handler(msg);
+    };
+    await this.subscribe_unsafe(topics, raw_handler);
+  }
+
+  async subscribe_unsafe(topics: string[], handler: (topic: string, msg: any) => void) {
+    for (const topic of topics) {
+      var topic_subs = this.subscribers.get(topic);
+      if (topic_subs === undefined) {
+        topic_subs = []
+        this.subscribers.set(topic, topic_subs);
+      }
+      topic_subs.push(handler);
+    }
+
+    try {
+      const subscribe_resp = await this.request_unsafe("ms-subscribe", topics);
+      if (subscribe_resp !== "ok") {
+        throw new Error(`subscribe call returned '${JSON.stringify(subscribe_resp)}' instead of 'ok'`);
+      }
+    } catch (err) {
+        // cleanup subscriber handlers in case subscription fails
+        for (const topic of topics) {
+          const topic_subs = this.subscribers.get(topic);
+          if (topic_subs !== undefined) {
+            topic_subs.pop();
+          }
+        }
+        throw err;
     }
   }
 
@@ -152,6 +217,7 @@ export class WSClient {
   private ws!: WebSocket;
   private resp_handlers: Map<number, Resolver<Response>> = new Map();
   private last_id: number = 0;
+  private subscribers: Map<string, Array<(topic: string, msg: any) => void>> = new Map();
 }
 
 function parseResponse(data: string): Response | null {
