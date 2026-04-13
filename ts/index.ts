@@ -56,6 +56,9 @@ export class WSClient implements MisirkaClient {
 
   on_alive(f: () => void) {
     this.on_connect = f
+    if (this.connected) {
+      f()
+    }
   }
 
   on_dead(f: () => void) {
@@ -167,6 +170,7 @@ export class WSClient implements MisirkaClient {
 
     this.ws.onopen = () => {
       console.log("WebSocket connected!")
+      this.connected = true
       if (this.on_connect) {
         this.on_connect()
       }
@@ -175,6 +179,7 @@ export class WSClient implements MisirkaClient {
     this.ws.onclose = () => {
       console.log("WebSocket disconnected, trying to reconnect")
       setTimeout(() => this.init(), 1000)
+      this.connected = false
       if (this.on_disconnect) {
         this.on_disconnect()
       }
@@ -262,6 +267,7 @@ export class WSClient implements MisirkaClient {
   private subscribers: Map<string, Array<(topic: string, msg: any) => void>> = new Map()
   private on_connect?: () => void
   private on_disconnect?: () => void
+  private connected: boolean = false
 }
 
 function parseResponse(data: string): Response | null {
