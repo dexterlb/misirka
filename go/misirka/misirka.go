@@ -18,8 +18,9 @@ type Misirka struct {
 
 	rawJsonHandlers map[string](func(json.RawMessage) (json.RawMessage, *MErr))
 
-	topics            map[string]*topicInfo
-	subscriptionMutex sync.Mutex
+	topics         map[string]*topicInfo
+	wsMutex        sync.Mutex
+	wsWriteMutexes map[*websocket.Conn]*sync.Mutex
 }
 
 func New(prefix string, errHandler func(error)) *Misirka {
@@ -30,6 +31,7 @@ func New(prefix string, errHandler func(error)) *Misirka {
 	m.rawJsonHandlers = make(map[string](func(json.RawMessage) (json.RawMessage, *MErr)))
 	m.topics = make(map[string]*topicInfo)
 	m.mux.HandleFunc(fmt.Sprintf("%sws", m.prefix), m.websocketHandler)
+	m.wsWriteMutexes = make(map[*websocket.Conn]*sync.Mutex)
 	return m
 }
 

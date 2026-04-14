@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -20,8 +21,18 @@ func (m *Misirka) websocketHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, fmt.Sprintf("couldn't make websocket: %s", err), 400)
 		return
 	}
+
+	m.wsMutex.Lock()
+	m.wsWriteMutexes[ws] = &sync.Mutex{}
+	m.wsMutex.Unlock()
+
 	defer func(ws *websocket.Conn) {
 		m.unsubscribeWS(ws)
+
+		m.wsMutex.Lock()
+		delete(m.wsWriteMutexes, ws)
+		m.wsMutex.Unlock()
+
 		err := ws.Close()
 		if err != nil {
 			m.errHandler(fmt.Errorf("could not close websocket", err))
@@ -32,11 +43,30 @@ func (m *Misirka) websocketHandler(w http.ResponseWriter, req *http.Request) {
 		_, msg, err := ws.ReadMessage()
 
 		if err != nil {
-			m.errHandler(fmt.Errorf("error reading from websocket: %w", err))
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+				m.errHandler(fmt.Errorf("error reading from websocket: %w", err))
+			}
 			break
 		}
 
 		m.handleWebsocketMsg(ws, msg)
+	}
+}
+
+func (m *Misirka) websocketWrite(ws *websocket.Conn, data []byte) {
+	mutex, ok := m.wsWriteMutexes[ws]
+	if !ok {
+		m.errHandler(fmt.Errorf("could not lock websocket for writing (it probably just closed)"))
+		return
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	err := ws.WriteMessage(websocket.TextMessage, data)
+	if err != nil {
+		m.errHandler(fmt.Errorf("could not write data to websocket: %w", err))
+		return
 	}
 }
 
@@ -72,11 +102,7 @@ func (m *Misirka) respond(ws *websocket.Conn, id *uint64, result interface{}) {
 		})
 		return
 	}
-	err = ws.WriteMessage(websocket.TextMessage, respBytes)
-	if err != nil {
-		m.errHandler(fmt.Errorf("could not write error to websocket: %w", err))
-		return
-	}
+	m.websocketWrite(ws, respBytes)
 }
 
 func (m *Misirka) respondWithErr(ws *websocket.Conn, id *uint64, merr *MErr) {
@@ -90,11 +116,7 @@ func (m *Misirka) respondWithErr(ws *websocket.Conn, id *uint64, merr *MErr) {
 		m.errHandler(fmt.Errorf("could not encode error: %w", err))
 		return
 	}
-	err = ws.WriteMessage(websocket.TextMessage, respBytes)
-	if err != nil {
-		m.errHandler(fmt.Errorf("could not write error to websocket: %w", err))
-		return
-	}
+	m.websocketWrite(ws, respBytes)
 }
 
 func (m *Misirka) handleWebsocketMsg(ws *websocket.Conn, message []byte) {
@@ -119,8 +141,8 @@ func (m *Misirka) handleWebsocketMsg(ws *websocket.Conn, message []byte) {
 }
 
 func (m *Misirka) handleSubscribe(ws *websocket.Conn, topics []string, id *uint64) {
-	m.subscriptionMutex.Lock()
-	defer m.subscriptionMutex.Unlock()
+	m.wsMutex.Lock()
+	defer m.wsMutex.Unlock()
 
 	if !m.checkTopicList(ws, id, topics) {
 		return
@@ -138,18 +160,15 @@ func (m *Misirka) handleSubscribe(ws *websocket.Conn, topics []string, id *uint6
 				m.errHandler(fmt.Errorf("could not encode websocket message", err))
 				continue
 			}
-			err = ws.WriteMessage(websocket.TextMessage, mdata)
-			if err != nil {
-				m.errHandler(fmt.Errorf("could not write message to websocket (topic %s): %w", topic, err))
-			}
+			m.websocketWrite(ws, mdata)
 		}
 	}
 	m.respond(ws, id, "ok")
 }
 
 func (m *Misirka) handleUnsubscribe(ws *websocket.Conn, topics []string, id *uint64) {
-	m.subscriptionMutex.Lock()
-	defer m.subscriptionMutex.Unlock()
+	m.wsMutex.Lock()
+	defer m.wsMutex.Unlock()
 
 	if !m.checkTopicList(ws, id, topics) {
 		return
@@ -178,8 +197,8 @@ func (m *Misirka) checkTopicList(ws *websocket.Conn, id *uint64, topics []string
 }
 
 func (m *Misirka) unsubscribeWS(ws *websocket.Conn) {
-	m.subscriptionMutex.Lock()
-	defer m.subscriptionMutex.Unlock()
+	m.wsMutex.Lock()
+	defer m.wsMutex.Unlock()
 
 	for _, tinfo := range m.topics {
 		if _, ok := tinfo.WSSubscribers[ws]; ok {
@@ -205,11 +224,7 @@ func (m *Misirka) publishToWebsockets(topic string, msg []byte) {
 	}
 
 	for ws := range m.topics[topic].WSSubscribers {
-		err = ws.WriteMessage(websocket.TextMessage, mdata)
-		if err != nil {
-			m.errHandler(fmt.Errorf("could not write message to websocket (topic %s): %w", topic, err))
-			return
-		}
+		m.websocketWrite(ws, mdata)
 	}
 }
 
