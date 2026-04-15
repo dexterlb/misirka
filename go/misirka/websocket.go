@@ -15,7 +15,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (m *Misirka) websocketHandler(w http.ResponseWriter, req *http.Request) {
+func (m *Misirka) WebsocketHandler() http.Handler {
+	return http.HandlerFunc(m.handleWebsocket)
+}
+
+func (m *Misirka) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 	ws, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("couldn't make websocket: %s", err), 400)

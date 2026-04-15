@@ -13,8 +13,7 @@ import (
 type Misirka struct {
 	mux        *http.ServeMux
 	errHandler func(error)
-
-	prefix string
+	apiDescr   string
 
 	calls  map[string]*callInfo
 	topics map[string]*topicInfo
@@ -23,29 +22,29 @@ type Misirka struct {
 	wsWriteMutexes map[*websocket.Conn]*sync.Mutex
 }
 
-func New(prefix string, errHandler func(error)) *Misirka {
+func New(errHandler func(error)) *Misirka {
 	m := &Misirka{}
-	m.prefix = prefix
 	m.mux = http.NewServeMux()
 	m.errHandler = errHandler
 	m.topics = make(map[string]*topicInfo)
 	m.calls = make(map[string]*callInfo)
-	m.mux.HandleFunc(fmt.Sprintf("%sws", m.prefix), m.websocketHandler)
 	m.wsWriteMutexes = make(map[*websocket.Conn]*sync.Mutex)
 	return m
 }
 
-func (m *Misirka) AddTopic(path string) {
+func AddTopic(m *Misirka, path string) *TopicMeta {
 	assertPath(path)
-	m.topics[path] = &topicInfo{
+	info := &topicInfo{
 		WSSubscribers: make(map[*websocket.Conn]struct{}),
 	}
+	m.topics[path] = info
 	handleCallHttp(m, path, func(args *getArgs) (json.RawMessage, *MErr) {
-		return json.RawMessage(m.topics[path].LastVal), nil
+		return json.RawMessage(info.LastVal), nil
 	})
+	return &TopicMeta{info: info}
 }
 
-func Publish[P any](m *Misirka, path string, item P) {
+func Publish(m *Misirka, path string, item any) {
 	info := m.topics[path]
 	if info == nil {
 		m.errHandler(fmt.Errorf("trying to publish to topic %s but it doesn't exist", path))
@@ -69,7 +68,7 @@ func Publish[P any](m *Misirka, path string, item P) {
 
 type Callee[P any, R any] func(param P) (R, *MErr)
 
-func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
+func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) *CallMeta[P, R] {
 	assertPath(path)
 	if _, ok := m.calls[path]; ok {
 		panic(fmt.Sprintf("HandleCall called twice for path %s", path))
@@ -83,14 +82,60 @@ func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
 
 	m.calls[path] = call
 	handleCallHttp(m, path, callee)
+
+	return &CallMeta[P, R]{info: call}
+}
+
+type callInfo struct {
+	rawHandler (func(json.RawMessage) (json.RawMessage, *MErr))
+	doc        callDoc
 }
 
 func (m *Misirka) HTTPHandler() http.Handler {
 	return m.mux
 }
 
+// HandleWebsocket registers a websocket handler under `/ws`. To use another
+// URL for the websocket, use `HandleWebsocketAt()`. To handle the Misirka
+// websocket manually, use `WebsocketHandler()`.
+func (m *Misirka) HandleWebsocket() {
+	m.HandleWebsocketAt("/ws")
+}
+
+// HandleWebsocket registers a websocket handler under the given url.
+// The URL should begin with a leading slash and is handled at http level.
+// To handle the Misirka websocket manually, use `WebsocketHandler()`.
+func (m *Misirka) HandleWebsocketAt(url string) {
+	m.mux.Handle(url, m.WebsocketHandler())
+}
+
+func (m *Misirka) HandleDoc() {
+	m.HandleDocAt("doc")
+}
+
+func (m *Misirka) HandleDocAt(path string) {
+	AddTopic(m, path).
+		Descr("documentation for this API").
+		Example(map[string]string{"foo": "<this documentation>"})
+
+	doc := &fullDoc{
+		APIDescr: m.apiDescr,
+		Topics:   make(map[string]*topicDoc),
+		Calls:    make(map[string]*callDoc),
+	}
+	for tp := range m.topics {
+		doc.Topics[tp] = &m.topics[tp].doc
+	}
+	for cp := range m.calls {
+		doc.Calls[cp] = &m.calls[cp].doc
+	}
+
+	doc.Validate()
+	Publish(m, path, doc)
+}
+
 func handleCallHttp[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
-	fullPath := fmt.Sprintf("%s%s", m.prefix, path)
+	fullPath := fmt.Sprintf("/%s", path)
 	m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		httpCallHandler(m, callee, w, req)
 	})
@@ -104,10 +149,7 @@ type topicInfo struct {
 	LastVal       []byte
 	WSSubscribers map[*websocket.Conn]struct{}
 	pubMutex      sync.Mutex
-}
-
-type callInfo struct {
-	rawHandler (func(json.RawMessage) (json.RawMessage, *MErr))
+	doc           topicDoc
 }
 
 func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, *MErr) {
