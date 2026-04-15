@@ -273,7 +273,7 @@ func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []b
 		return
 	}
 
-	handler, ok := m.rawJsonHandlers[method]
+	call, ok := m.calls[method]
 	if !ok {
 		m.respondWithErr(ws, id, &MErr{
 			Err:  fmt.Errorf("no such method: %s", method),
@@ -281,7 +281,7 @@ func (m *Misirka) handleRpcCall(ws *websocket.Conn, method string, paramData []b
 		})
 		return
 	}
-	respData, merr := handler(paramData)
+	respData, merr := call.rawHandler(paramData)
 	if merr != nil {
 		m.respondWithErr(ws, id, merr)
 		return

@@ -16,9 +16,9 @@ type Misirka struct {
 
 	prefix string
 
-	rawJsonHandlers map[string](func(json.RawMessage) (json.RawMessage, *MErr))
+	calls  map[string]*callInfo
+	topics map[string]*topicInfo
 
-	topics         map[string]*topicInfo
 	wsMutex        sync.Mutex
 	wsWriteMutexes map[*websocket.Conn]*sync.Mutex
 }
@@ -28,8 +28,8 @@ func New(prefix string, errHandler func(error)) *Misirka {
 	m.prefix = prefix
 	m.mux = http.NewServeMux()
 	m.errHandler = errHandler
-	m.rawJsonHandlers = make(map[string](func(json.RawMessage) (json.RawMessage, *MErr)))
 	m.topics = make(map[string]*topicInfo)
+	m.calls = make(map[string]*callInfo)
 	m.mux.HandleFunc(fmt.Sprintf("%sws", m.prefix), m.websocketHandler)
 	m.wsWriteMutexes = make(map[*websocket.Conn]*sync.Mutex)
 	return m
@@ -71,18 +71,21 @@ type Callee[P any, R any] func(param P) (R, *MErr)
 
 func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
 	assertPath(path)
-	if _, ok := m.rawJsonHandlers[path]; ok {
+	if _, ok := m.calls[path]; ok {
 		panic(fmt.Sprintf("HandleCall called twice for path %s", path))
 	}
 
-	m.rawJsonHandlers[path] = func(param json.RawMessage) (json.RawMessage, *MErr) {
-		return rawJsonHandler(m, callee, param)
+	call := &callInfo{
+		rawHandler: func(param json.RawMessage) (json.RawMessage, *MErr) {
+			return rawJsonHandler(m, callee, param)
+		},
 	}
 
+	m.calls[path] = call
 	handleCallHttp(m, path, callee)
 }
 
-func (m *Misirka) Handler() http.Handler {
+func (m *Misirka) HTTPHandler() http.Handler {
 	return m.mux
 }
 
@@ -101,6 +104,10 @@ type topicInfo struct {
 	LastVal       []byte
 	WSSubscribers map[*websocket.Conn]struct{}
 	pubMutex      sync.Mutex
+}
+
+type callInfo struct {
+	rawHandler (func(json.RawMessage) (json.RawMessage, *MErr))
 }
 
 func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, *MErr) {
