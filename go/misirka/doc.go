@@ -47,14 +47,6 @@ func (f *fullDoc) Validate() {
 	}
 }
 
-type CallMeta[P any, R any] struct {
-	info *callInfo
-}
-
-type TopicMeta struct {
-	info *topicInfo
-}
-
 func (c *CallMeta[P, R]) Descr(descr string) *CallMeta[P, R] {
 	c.info.doc.Description = descr
 	return c

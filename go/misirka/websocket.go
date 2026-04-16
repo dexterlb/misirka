@@ -39,7 +39,7 @@ func (m *Misirka) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 
 		err := ws.Close()
 		if err != nil {
-			m.errHandler(fmt.Errorf("could not close websocket", err))
+			m.errHandler(fmt.Errorf("could not close websocket: %w", err))
 		}
 	}(ws)
 
@@ -161,7 +161,7 @@ func (m *Misirka) handleSubscribe(ws *websocket.Conn, topics []string, id *uint6
 			}
 			mdata, err := json.Marshal(wsmsg)
 			if err != nil {
-				m.errHandler(fmt.Errorf("could not encode websocket message", err))
+				m.errHandler(fmt.Errorf("could not encode websocket message: %w", err))
 				continue
 			}
 			m.websocketWrite(ws, mdata)
@@ -223,7 +223,7 @@ func (m *Misirka) publishToWebsockets(topic string, msg []byte) {
 	}
 	mdata, err := json.Marshal(wsmsg)
 	if err != nil {
-		m.errHandler(fmt.Errorf("could not encode websocket message", err))
+		m.errHandler(fmt.Errorf("could not encode websocket message: %w", err))
 		return
 	}
 

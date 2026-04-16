@@ -83,7 +83,7 @@ func HandleCall[P any, R any](m *Misirka, path string, callee Callee[P, R]) *Cal
 	m.calls[path] = call
 	handleCallHttp(m, path, callee)
 
-	return &CallMeta[P, R]{info: call}
+	return &CallMeta[P, R]{m: m, info: call, callee: callee}
 }
 
 type callInfo struct {
@@ -107,6 +107,16 @@ func (m *Misirka) HandleWebsocket() {
 // To handle the Misirka websocket manually, use `WebsocketHandler()`.
 func (m *Misirka) HandleWebsocketAt(url string) {
 	m.mux.Handle(url, m.WebsocketHandler())
+}
+
+type CallMeta[P any, R any] struct {
+	info   *callInfo
+	m      *Misirka
+	callee Callee[P, R]
+}
+
+type TopicMeta struct {
+	info *topicInfo
 }
 
 func (m *Misirka) HandleDoc() {
@@ -139,6 +149,15 @@ func handleCallHttp[P any, R any](m *Misirka, path string, callee Callee[P, R]) 
 	m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		httpCallHandler(m, callee, w, req)
 	})
+}
+
+func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R] {
+	fullPath := fmt.Sprintf("/%s", pathWithWildcards)
+	wildcards := extractWildcards(pathWithWildcards)
+	c.m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
+		httpPathValueCallHandler(c.m, wildcards, c.callee, w, req)
+	})
+	return c
 }
 
 type getArgs struct {
@@ -180,8 +199,6 @@ func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData jso
 }
 
 func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	var param P
 
 	switch req.Method {
@@ -195,20 +212,7 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 			})
 			return
 		}
-		result, merr := callee(param)
-		if merr != nil {
-			m.writeError(w, merr)
-			return
-		}
-		enc := json.NewEncoder(w)
-		err = enc.Encode(result)
-		if err != nil {
-			m.writeError(w, &MErr{
-				Code: -32700,
-				Err:  fmt.Errorf("could not encode data: %w", err),
-			})
-			return
-		}
+		finishHttpCall(m, callee, param, w)
 	case "GET":
 		if len(req.URL.Query()) != 0 {
 			paramMap := make(map[string]string)
@@ -222,28 +226,56 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 				}
 				paramMap[k] = vals[0]
 			}
-			paramJson, _ := json.Marshal(paramMap)
-			err := json.Unmarshal(paramJson, &param)
+			err := valsToStruct(paramMap, &param)
 			if err != nil {
-				m.errHandler(fmt.Errorf("could not decode stringmap from URL query: %w", err))
+				m.writeError(w, &MErr{
+					Code: -32700,
+					Err:  fmt.Errorf("could not decode stringmap from URL query: %w", err),
+				})
 				return
 			}
 		}
-		result, merr := callee(param)
-		if merr != nil {
-			m.writeError(w, merr)
-			return
-		}
-		enc := json.NewEncoder(w)
-		err := enc.Encode(result)
-		if err != nil {
-			m.errHandler(fmt.Errorf("could not write response: %w", err))
-			return
-		}
+		finishHttpCall(m, callee, param, w)
+	}
+}
+
+func httpPathValueCallHandler[P any, R any](m *Misirka, wildcards []string, callee Callee[P, R], w http.ResponseWriter, req *http.Request) {
+	paramMap := make(map[string]string)
+	for _, wildcard := range wildcards {
+		paramMap[wildcard] = req.PathValue(wildcard)
+	}
+	var param P
+	err := valsToStruct(paramMap, &param)
+	if err != nil {
+		m.writeError(w, &MErr{
+			Code: -32700,
+			Err:  fmt.Errorf("could not decode stringmap from URL query: %w", err),
+		})
+		return
+	}
+
+	finishHttpCall(m, callee, param, w)
+}
+
+func finishHttpCall[P any, R any](m *Misirka, callee Callee[P, R], param P, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+
+	result, merr := callee(param)
+	if merr != nil {
+		m.writeError(w, merr)
+		return
+	}
+	enc := json.NewEncoder(w)
+	err := enc.Encode(result)
+	if err != nil {
+		m.errHandler(fmt.Errorf("could not write response: %w", err))
+		return
 	}
 }
 
 func (m *Misirka) writeError(w http.ResponseWriter, merr *MErr) {
+	w.Header().Set("Content-Type", "application/json")
+
 	enc := json.NewEncoder(w)
 	err := enc.Encode(merr)
 	if err != nil {
