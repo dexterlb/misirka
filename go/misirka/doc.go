@@ -9,8 +9,9 @@ type fullDoc struct {
 }
 
 type callDoc struct {
-	Description  string        `json:"description"`
-	ExampleCalls []exampleCall `json:"example_calls"`
+	Description      string        `json:"description"`
+	ExampleCalls     []exampleCall `json:"example_calls"`
+	PathValueAliases []string      `json:"path_value_aliases,omitempty"`
 }
 
 type topicDoc struct {

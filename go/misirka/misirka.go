@@ -124,10 +124,6 @@ func (m *Misirka) HandleDoc() {
 }
 
 func (m *Misirka) HandleDocAt(path string) {
-	AddTopic(m, path).
-		Descr("documentation for this API").
-		Example(map[string]string{"foo": "<this documentation>"})
-
 	doc := &fullDoc{
 		APIDescr: m.apiDescr,
 		Topics:   make(map[string]*topicDoc),
@@ -141,7 +137,14 @@ func (m *Misirka) HandleDocAt(path string) {
 	}
 
 	doc.Validate()
-	Publish(m, path, doc)
+
+	handleDoc := func(arg struct{}) (*fullDoc, *MErr) {
+		return doc, nil
+	}
+
+	HandleCall(m, path, handleDoc).
+		Descr("get documentation for this API").
+		Example(struct{}{}, &fullDoc{APIDescr: "<this documentation>"})
 }
 
 func handleCallHttp[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
@@ -157,6 +160,7 @@ func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R
 	c.m.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		httpPathValueCallHandler(c.m, wildcards, c.callee, w, req)
 	})
+	c.info.doc.PathValueAliases = append(c.info.doc.PathValueAliases, pathWithWildcards)
 	return c
 }
 
