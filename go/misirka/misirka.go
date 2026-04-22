@@ -143,29 +143,28 @@ func (m *Misirka) HandleDocAt(path string, htmlPath string) {
 		return doc, nil
 	}
 
-	html, err := m.docHTML(doc)
+	htmlgz, err := m.docHTMLgz(doc)
 	if err != nil {
 		panic(fmt.Sprintf("documentation doesn't render, %s", err))
 	}
 
-	handleDocHTML := func(arg struct{}) (*RawData, *MErr) {
+	handleDocHTMLgz := func(arg struct{}) (*RawData, *MErr) {
 		return &RawData{
-			Data:     bytes.NewReader(html),
-			MimeType: "text/html",
+			Data:            bytes.NewReader(htmlgz),
+			MimeType:        "text/html",
+			ContentEncoding: "gzip",
 		}, nil
 	}
 
+	exampleDoc := &fullDoc{APIDescr: "<this documentation>"}
+
 	HandleCall(m, path, handleDoc).
 		Descr("get documentation for this API").
-		Example(struct{}{}, &fullDoc{APIDescr: "<this documentation>"})
+		Example(struct{}{}, exampleDoc)
 
 	if htmlPath != "" {
-		HandleCall(m, htmlPath, handleDocHTML).
-			Descr("get documentation for this API in human-readeble HTML").
-			Example(struct{}{}, &RawData{
-				Data:     bytes.NewReader([]byte("<documentation HTML>")),
-				MimeType: "text/html",
-			})
+		HandleCall(m, htmlPath, handleDocHTMLgz).
+			Descr("get documentation for this API in human-readeble HTML")
 	}
 }
 
@@ -252,6 +251,7 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 		finishHttpCall(m, callee, param, w)
 	} else if rawParam, ok := any(param).(*RawData); ok {
 		rawParam.MimeType = req.Header.Get("Content-Type")
+		rawParam.ContentEncoding = req.Header.Get("Content-Encoding")
 		rawParam.Data = req.Body
 		finishHttpCall(m, callee, param, w)
 	} else {
@@ -294,7 +294,12 @@ func finishHttpCall[P any, R any](m *Misirka, callee Callee[P, R], param P, w ht
 	}
 
 	if raw, ok := any(result).(*RawData); ok {
-		w.Header().Set("Content-Type", raw.MimeType)
+		if raw.MimeType != "" {
+			w.Header().Set("Content-Type", raw.MimeType)
+		}
+		if raw.ContentEncoding != "" {
+			w.Header().Set("Content-Encoding", raw.ContentEncoding)
+		}
 		_, err := io.Copy(w, raw.Data)
 		if err != nil {
 			m.errHandler(fmt.Errorf("could not write raw data response: %w", err))

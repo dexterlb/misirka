@@ -2,6 +2,7 @@ package misirka
 
 import (
 	"bytes"
+	"compress/gzip"
 	_ "embed"
 	"fmt"
 	"text/template"
@@ -86,7 +87,7 @@ func (m *Misirka) Descr(descr string) *Misirka {
 //go:embed doc.html
 var docHTMLTemplate []byte
 
-func (m *Misirka) docHTML(doc *fullDoc) ([]byte, error) {
+func (m *Misirka) docHTMLgz(doc *fullDoc) ([]byte, error) {
 	funcs := template.FuncMap{
 		"jsonify": func(x interface{}) string {
 			data, err := json.Marshal(x)
@@ -101,10 +102,12 @@ func (m *Misirka) docHTML(doc *fullDoc) ([]byte, error) {
 		return nil, fmt.Errorf("parsing doc template: %w", err)
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, doc); err != nil {
+	var gzbuf bytes.Buffer
+	w := gzip.NewWriter(&gzbuf)
+	if err := tmpl.Execute(w, doc); err != nil {
 		return nil, fmt.Errorf("executing doc template: %w", err)
 	}
+	w.Close()
 
-	return buf.Bytes(), nil
+	return gzbuf.Bytes(), nil
 }

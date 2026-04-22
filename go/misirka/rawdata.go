@@ -10,8 +10,9 @@ import (
 )
 
 type RawData struct {
-	Data     io.Reader
-	MimeType string
+	Data            io.Reader
+	MimeType        string
+	ContentEncoding string
 }
 
 func (r RawData) MarshalJSON() ([]byte, error) {
