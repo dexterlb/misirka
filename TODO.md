@@ -1,0 +1,75 @@
+- Write a proper README
+    - [ ] Project description
+    - [ ] Why we do this instead of just using [wamp](https://wamp-proto.org) or plain MQTT
+        - Simpler
+        - Opinionated
+        - Fallback to plain HTTP requests (critical feature)
+        - NIH syndrome
+    - [ ] Usage
+    - [ ] Examples
+- Rename directories
+    - [ ] Decide on naming (frontend, backend, client, server, etc)
+    - [ ] What is currently `go/misirka` should probably be `go/backend` or `go/server` or something like that
+    - [ ] What is currently `ts/misirka` should probably be `ts/frontend` or `ts/client`
+- Backends
+    - Go Backend
+        - [ ] Support different transports
+            - [x] HTTP requests
+                - [x] RPC
+                    - [x] Calls by POST request (request body is the parameter, response body is the result)
+                    - [x] Calls by GET request (only when parameter is simple struct); GET query params decoded as struct fields)
+                    - [x] Calls by GET request (path value alias: alternative path for the same request with some components of the URL injected as struct fields)
+                - [x] PubSub
+                    - [x] Get last value by making a request to the topic path
+            - [x] Websockets
+                - [x] RPC over websocket
+                    - [x] jsonrpc-compatible
+                - [x] PubSub over websocket
+                    - [x] Allow clients to subscribe and unsubscribe to topics and send them messages
+            - [ ] MQTT
+                - Optionally connect to a MQTT broker
+                - For pubsub, publish to topics directly
+                - For RPC, subscribe to the callables' respective topics and use the `response topic` and `corellation data` message fields to tie requests with responses
+        - [ ] Data formats
+            - [x] JSON
+            - [ ] Multi-format support using [codec](https://github.com/ugorji/go) (a binary format like cbor or messagepack is really good to have for high-density data)
+                - [ ] The misirka server constructor should take a configuration option that has a list of supported codecs
+                - [ ] The misirka server constructor should initialise [codec-handle](https://pkg.go.dev/github.com/ugorji/go/codec#Handle)s for all supported codecs
+                - [ ] HTTP clients should be able to select a format to be used by setting a header.
+                - [ ] Websocket clients should be able to set a [sub-protocol string](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/WebSocket#protocols) to specify what format they would like to use for the entire websocket communication
+                - [ ] For MQTT, the encoding format should be globally set in configuration (all MQTT messages will use the same format)
+                - [ ] For RPC, the call handler should use the appropriate codec-handle to parse the parameter and then encode the response.
+                - [ ] For pubsub, encode the message in all supported formats not just json
+                    - [ ] For every subscriber, send the appropriately-encoded version of the message
+                    - [ ] When a new subscriber appears, requesting a new codec, we can also send the appropriate version since we preemptively encode into all formats
+            - [ ] Raw bytes objects
+                - [ ] Add a special type `RawData` that can be used as a parameter/result type (RPC) or valut type (pubsub)
+                - [ ] `RawData` should have at least these fields:
+                    - `Data []byte`
+                    - `MimeType string`
+                - [ ] For HTTP calls, `RawData` objects should be constructed directly from/to the request body without going through encoding
+                    - In the case of a RawData parameter, the MimeType field should be set to whatever is in the accept-encoding header, so that the call knows what to return
+                    - In the case of a RawData result, the callable is responsible for optionally setting the mime type, which will be set as a HTTP header when responding
+                - [ ] For non-HTTP calls, an appropriate scheme to encode/decode the data field should be used
+                    - Base64 for json
+                    - MessagePack has its own binary data field type, etc
+        - [ ] Automatic documentation
+            - [x] Allow handlers to define documentation fields
+                - [x] Each handling function should return a Meta object which has methods that allow setting documentation
+                - [x] Allow setting a description
+                - [x] Allow setting examples
+                - [ ] Allow setting schema
+                    - This is probably hard to do right in terms of verification, especially with multi-format support, so we might just drop it
+            - [x] Handle a call that returns the documentation as json
+            - [ ] Embed a simple documentation viewer
+                - [ ] Using a raw byte object handler (see above), serve a simple embedded (sorry albert) html file that just gets the documentation handler and displays it neatly
+                - [ ] Clickable examples that actually get executed
+- Frontends
+    - Typescript frontend
+        - [ ] Transport support
+            - [x] Websocket connection
+            - [ ] MQTT connection (using the Paho library or similar)
+        - [x] Typechecked call and subscribe support using [zod](https://zod.dev/)-like schemas
+        - [ ] Format support (user should be able to specify what format to use for the connection)
+            - [x] JSON
+            - [ ] CBOR, MessagePack, etc
