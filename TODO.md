@@ -42,17 +42,17 @@
                 - [ ] For pubsub, encode the message in all supported formats not just json
                     - [ ] For every subscriber, send the appropriately-encoded version of the message
                     - [ ] When a new subscriber appears, requesting a new codec, we can also send the appropriate version since we preemptively encode into all formats
-            - [ ] Raw bytes objects
-                - [ ] Add a special type `RawData` that can be used as a parameter/result type (RPC) or valut type (pubsub)
-                - [ ] `RawData` should have at least these fields:
+            - [x] Raw bytes objects
+                - [x] Add a special type `RawData` that can be used as a parameter/result type (RPC) or valut type (pubsub)
+                - [x] `RawData` should have at least these fields:
                     - `Data []byte`
                     - `MimeType string`
-                - [ ] For HTTP calls, `RawData` objects should be constructed directly from/to the request body without going through encoding
+                - [x] For HTTP calls, `RawData` objects should be constructed directly from/to the request body without going through encoding
                     - In the case of a RawData parameter, the MimeType field should be set to whatever is in the accept-encoding header, so that the call knows what to return
                     - In the case of a RawData result, the callable is responsible for optionally setting the mime type, which will be set as a HTTP header when responding
-                - [ ] For non-HTTP calls, an appropriate scheme to encode/decode the data field should be used
-                    - Base64 for json
-                    - MessagePack has its own binary data field type, etc
+                - [x] For non-HTTP calls, an appropriate scheme to encode/decode the data field should be used
+                    - [x] Base64 for json
+                    - [ ] MessagePack has its own binary data field type, etc
         - [ ] Automatic documentation
             - [x] Allow handlers to define documentation fields
                 - [x] Each handling function should return a Meta object which has methods that allow setting documentation

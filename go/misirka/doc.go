@@ -1,6 +1,13 @@
 package misirka
 
-import "fmt"
+import (
+	"bytes"
+	_ "embed"
+	"fmt"
+	"text/template"
+
+	"github.com/goccy/go-json"
+)
 
 type fullDoc struct {
 	APIDescr string               `json:"description"`
@@ -74,4 +81,30 @@ func (t *TopicMeta) Example(val any) *TopicMeta {
 func (m *Misirka) Descr(descr string) *Misirka {
 	m.apiDescr = descr
 	return m
+}
+
+//go:embed doc.html
+var docHTMLTemplate []byte
+
+func (m *Misirka) docHTML(doc *fullDoc) ([]byte, error) {
+	funcs := template.FuncMap{
+		"jsonify": func(x interface{}) string {
+			data, err := json.Marshal(x)
+			if err != nil {
+				panic(fmt.Sprintf("cannot jsonify value inside documentation! %s", err))
+			}
+			return string(data)
+		},
+	}
+	tmpl, err := template.New("doc").Funcs(funcs).Parse(string(docHTMLTemplate))
+	if err != nil {
+		return nil, fmt.Errorf("parsing doc template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, doc); err != nil {
+		return nil, fmt.Errorf("executing doc template: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }

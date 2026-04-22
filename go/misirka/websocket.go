@@ -22,6 +22,10 @@ func (m *Misirka) WebsocketHandler() http.Handler {
 func (m *Misirka) handleWebsocket(w http.ResponseWriter, req *http.Request) {
 	ws, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
+		// FIXME: the following call outputs a `superflous response.WriteHeader call`
+		// warning, we probably should not be calling http.Error because
+		// the upgrader probably sets the error header itself, but we should
+		// investigate to be sure
 		http.Error(w, fmt.Sprintf("couldn't make websocket: %s", err), 400)
 		return
 	}

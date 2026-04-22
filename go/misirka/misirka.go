@@ -3,6 +3,7 @@ package misirka
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -120,10 +121,10 @@ type TopicMeta struct {
 }
 
 func (m *Misirka) HandleDoc() {
-	m.HandleDocAt("doc")
+	m.HandleDocAt("doc", "doc.html")
 }
 
-func (m *Misirka) HandleDocAt(path string) {
+func (m *Misirka) HandleDocAt(path string, htmlPath string) {
 	doc := &fullDoc{
 		APIDescr: m.apiDescr,
 		Topics:   make(map[string]*topicDoc),
@@ -142,9 +143,30 @@ func (m *Misirka) HandleDocAt(path string) {
 		return doc, nil
 	}
 
+	html, err := m.docHTML(doc)
+	if err != nil {
+		panic(fmt.Sprintf("documentation doesn't render, %s", err))
+	}
+
+	handleDocHTML := func(arg struct{}) (*RawData, *MErr) {
+		return &RawData{
+			Data:     bytes.NewReader(html),
+			MimeType: "text/html",
+		}, nil
+	}
+
 	HandleCall(m, path, handleDoc).
 		Descr("get documentation for this API").
 		Example(struct{}{}, &fullDoc{APIDescr: "<this documentation>"})
+
+	if htmlPath != "" {
+		HandleCall(m, htmlPath, handleDocHTML).
+			Descr("get documentation for this API in human-readeble HTML").
+			Example(struct{}{}, &RawData{
+				Data:     bytes.NewReader([]byte("<documentation HTML>")),
+				MimeType: "text/html",
+			})
+	}
 }
 
 func handleCallHttp[P any, R any](m *Misirka, path string, callee Callee[P, R]) {
@@ -205,19 +227,7 @@ func rawJsonHandler[P any, R any](m *Misirka, callee Callee[P, R], paramData jso
 func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.ResponseWriter, req *http.Request) {
 	var param P
 
-	switch req.Method {
-	case "POST":
-		dec := json.NewDecoder(req.Body)
-		err := dec.Decode(&param)
-		if err != nil {
-			m.writeError(w, &MErr{
-				Code: -32700,
-				Err:  fmt.Errorf("could not read request body: %w", err),
-			})
-			return
-		}
-		finishHttpCall(m, callee, param, w)
-	case "GET":
+	if req.Method == "GET" {
 		if len(req.URL.Query()) != 0 {
 			paramMap := make(map[string]string)
 			for k, vals := range req.URL.Query() {
@@ -238,6 +248,21 @@ func httpCallHandler[P any, R any](m *Misirka, callee Callee[P, R], w http.Respo
 				})
 				return
 			}
+		}
+		finishHttpCall(m, callee, param, w)
+	} else if rawParam, ok := any(param).(*RawData); ok {
+		rawParam.MimeType = req.Header.Get("Content-Type")
+		rawParam.Data = req.Body
+		finishHttpCall(m, callee, param, w)
+	} else {
+		dec := json.NewDecoder(req.Body)
+		err := dec.Decode(&param)
+		if err != nil {
+			m.writeError(w, &MErr{
+				Code: -32700,
+				Err:  fmt.Errorf("could not read request body: %w", err),
+			})
+			return
 		}
 		finishHttpCall(m, callee, param, w)
 	}
@@ -262,18 +287,27 @@ func httpPathValueCallHandler[P any, R any](m *Misirka, wildcards []string, call
 }
 
 func finishHttpCall[P any, R any](m *Misirka, callee Callee[P, R], param P, w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-
 	result, merr := callee(param)
 	if merr != nil {
 		m.writeError(w, merr)
 		return
 	}
-	enc := json.NewEncoder(w)
-	err := enc.Encode(result)
-	if err != nil {
-		m.errHandler(fmt.Errorf("could not write response: %w", err))
-		return
+
+	if raw, ok := any(result).(*RawData); ok {
+		w.Header().Set("Content-Type", raw.MimeType)
+		_, err := io.Copy(w, raw.Data)
+		if err != nil {
+			m.errHandler(fmt.Errorf("could not write raw data response: %w", err))
+			return
+		}
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		err := enc.Encode(result)
+		if err != nil {
+			m.errHandler(fmt.Errorf("could not write json response: %w", err))
+			return
+		}
 	}
 }
 
