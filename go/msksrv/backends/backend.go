@@ -10,6 +10,7 @@ import (
 type Backend interface {
 	AddTopic(path string, bus mskbus.Bus)
 	AddCall(path string, handler CallHandler)
+	AddPathValueCallHandler(pathWithWildcards string, handler CallHandler)
 }
 
 // CallHandler is a callable that operates with opaque values

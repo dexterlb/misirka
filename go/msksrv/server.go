@@ -7,7 +7,6 @@ import (
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
-	"github.com/dexterlb/misirka/go/msksrv/backends/httpbackend"
 )
 
 type Server struct {
@@ -18,9 +17,6 @@ type Server struct {
 	topics map[string]*topicInfo
 
 	backends []backends.Backend
-
-	// used for the PathValue hacks
-	httpBackends []*httpbackend.HTTPBackend
 }
 
 func New(errHandler func(error)) *Server {
@@ -33,9 +29,6 @@ func New(errHandler func(error)) *Server {
 
 func (s *Server) AddBackend(b backends.Backend) {
 	s.backends = append(s.backends, b)
-	if hb, ok := b.(*httpbackend.HTTPBackend); ok {
-		s.httpBackends = append(s.httpBackends, hb)
-	}
 }
 
 func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
@@ -100,7 +93,9 @@ func (t *TopicMeta[T]) Bus() *mskbus.BusOf[T] {
 }
 
 func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R] {
-	for _, backend := range c.s.httpBackends {
+	// TODO: verify that P is a pointer to a struct and its fields match
+	// the given wildcards (reflect goes brr)
+	for _, backend := range c.s.backends {
 		backend.AddPathValueCallHandler(pathWithWildcards, c.info.handler)
 	}
 	c.info.doc.PathValueAliases = append(c.info.doc.PathValueAliases, pathWithWildcards)

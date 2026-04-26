@@ -50,6 +50,10 @@ func (w *WSBackend) WSHTTPHandler() http.Handler {
 	return http.HandlerFunc(w.handleWebsocket)
 }
 
+func (w *WSBackend) AddPathValueCallHandler(pathWithWildcards string, handler backends.CallHandler) {
+	// do nothing (the websocket backend doesn't support these aliases)
+}
+
 func (w *WSBackend) handleWebsocket(writer http.ResponseWriter, req *http.Request) {
 	ws, err := upgrader.Upgrade(writer, req, nil)
 	if err != nil {

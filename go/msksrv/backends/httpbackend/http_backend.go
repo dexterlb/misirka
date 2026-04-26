@@ -137,6 +137,11 @@ func (h *HTTPBackend) pathValueCallHandler(wildcards []string, handler backends.
 	}
 
 	decoder := func(param any) error {
+		// TODO: instead of just looking at path-values, also look at the request body
+		// like we do with "regular" requests. Merge values from both sources.
+		// Also, in the case when one of the fields of the handler's argument (which must be a struct)
+		// is tagged as "catchall", decode the body into that field instead of into
+		// the whole struct. This functionality will also be quite useful in the MQTT backend.
 		err := mskdata.ValsToStruct(paramMap, param)
 		if err != nil {
 			return mskdata.Errorf(
