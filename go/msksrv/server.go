@@ -2,14 +2,12 @@ package msksrv
 
 import (
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/dexterlb/misirka/go/msksrv/backends/httpbackend"
-	"github.com/dexterlb/misirka/go/msksrv/backends/wsbackend"
 )
 
 type Server struct {
@@ -21,10 +19,8 @@ type Server struct {
 
 	backends []backends.Backend
 
-	// TODO: instead of doing this, make a "misirkamaker" function that
-	// initialises all backends and then passes them to a new Server
-	wsBackend   *wsbackend.WSBackend
-	httpBackend *httpbackend.HTTPBackend
+	// used for the PathValue hacks
+	httpBackends []*httpbackend.HTTPBackend
 }
 
 func New(errHandler func(error)) *Server {
@@ -32,10 +28,14 @@ func New(errHandler func(error)) *Server {
 	s.errHandler = errHandler
 	s.topics = make(map[string]*topicInfo)
 	s.calls = make(map[string]*callInfo)
-	s.wsBackend = wsbackend.New(errHandler)
-	s.httpBackend = httpbackend.New(errHandler)
-	s.backends = []backends.Backend{s.wsBackend, s.httpBackend}
 	return s
+}
+
+func (s *Server) AddBackend(b backends.Backend) {
+	s.backends = append(s.backends, b)
+	if hb, ok := b.(*httpbackend.HTTPBackend); ok {
+		s.httpBackends = append(s.httpBackends, hb)
+	}
 }
 
 func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
@@ -84,24 +84,6 @@ type topicInfo struct {
 	doc      topicDoc
 }
 
-func (s *Server) HTTPHandler() http.Handler {
-	return s.httpBackend.Handler()
-}
-
-// HandleWebsocket registers a websocket handler under `/ws`. To use another
-// URL for the websocket, use `HandleWebsocketAt()`. To handle the Server
-// websocket manually, use `WebsocketHandler()`.
-func (s *Server) HandleWebsocket() {
-	s.HandleWebsocketAt("/ws")
-}
-
-// HandleWebsocket registers a websocket handler under the given url.
-// The URL should begin with a leading slash and is handled at http level.
-// To handle the Server websocket manually, use `WebsocketHandler()`.
-func (s *Server) HandleWebsocketAt(url string) {
-	s.httpBackend.AddRawHttpHandler(url, s.wsBackend.WSHTTPHandler())
-}
-
 type CallMeta[P any, R any] struct {
 	info   *callInfo
 	s      *Server
@@ -118,7 +100,9 @@ func (t *TopicMeta[T]) Bus() *mskbus.BusOf[T] {
 }
 
 func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R] {
-	c.s.httpBackend.AddPathValueCallHandler(pathWithWildcards, c.info.handler)
+	for _, backend := range c.s.httpBackends {
+		backend.AddPathValueCallHandler(pathWithWildcards, c.info.handler)
+	}
 	c.info.doc.PathValueAliases = append(c.info.doc.PathValueAliases, pathWithWildcards)
 	return c
 }

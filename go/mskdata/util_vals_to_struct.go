@@ -24,16 +24,7 @@ type typeInfo struct {
 
 var typeCache sync.Map
 
-func ValsToStruct[P any](vm map[string]string, p *P) error {
-	var zero P
-	t := reflect.TypeOf(zero)
-	info, ok := typeCache.Load(t)
-	if !ok {
-		info = cacheType(t)
-		typeCache.Store(t, info)
-	}
-	ti := info.(*typeInfo)
-
+func ValsToStruct(vm map[string]string, p any) error {
 	rv := reflect.ValueOf(p)
 	if rv.Kind() != reflect.Ptr {
 		return &invalidTypeError{kind: rv.Kind().String()}
@@ -42,6 +33,13 @@ func ValsToStruct[P any](vm map[string]string, p *P) error {
 	if rv.Kind() != reflect.Struct {
 		return &invalidTypeError{kind: rv.Kind().String()}
 	}
+	t := rv.Type()
+	info, ok := typeCache.Load(t)
+	if !ok {
+		info = cacheType(t)
+		typeCache.Store(t, info)
+	}
+	ti := info.(*typeInfo)
 
 	for _, f := range ti.fields {
 		val, ok := vm[f.name]

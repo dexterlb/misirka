@@ -61,7 +61,7 @@ func (h *HTTPBackend) Handler() http.Handler {
 
 func (h *HTTPBackend) rawJsonHandler(handler backends.CallHandler, paramData json.RawMessage) (json.RawMessage, error) {
 	decoder := func(param any) error {
-		err := json.Unmarshal(paramData, &param)
+		err := json.Unmarshal(paramData, param)
 		if err != nil {
 			return mskdata.Errorf(
 				-32700,
@@ -101,7 +101,7 @@ func (h *HTTPBackend) httpCallHandler(handler backends.CallHandler, w http.Respo
 					}
 					paramMap[k] = vals[0]
 				}
-				err := mskdata.ValsToStruct(paramMap, &param)
+				err := mskdata.ValsToStruct(paramMap, param)
 				if err != nil {
 					return mskdata.Errorf(
 						-32700,
@@ -137,7 +137,7 @@ func (h *HTTPBackend) pathValueCallHandler(wildcards []string, handler backends.
 	}
 
 	decoder := func(param any) error {
-		err := mskdata.ValsToStruct(paramMap, &param)
+		err := mskdata.ValsToStruct(paramMap, param)
 		if err != nil {
 			return mskdata.Errorf(
 				-32700,
