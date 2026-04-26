@@ -1,4 +1,4 @@
-package misirka
+package msksrvbuilder
 
 import (
 	"fmt"
