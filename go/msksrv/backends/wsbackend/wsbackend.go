@@ -105,18 +105,12 @@ type rpcRequest struct {
 func (w *WSBackend) handleWebsocketMsg(conn *connInfo, message []byte) {
 	var msg rpcRequest
 	if err := json.Unmarshal(message, &msg); err != nil {
-		conn.RespondWithErr(nil, &mskdata.Error{
-			Err:  err,
-			Code: -37000,
-		})
+		conn.RespondWithErr(nil, mskdata.Errorf(-37000, "could not decode message: %w", err))
 		return
 	}
 
 	if msg.Method == "" {
-		conn.RespondWithErr(msg.ID, &mskdata.Error{
-			Err:  fmt.Errorf("method name unspecified"),
-			Code: -37000,
-		})
+		conn.RespondWithErr(msg.ID, mskdata.Errorf(-37000, "method name unspecified"))
 		return
 	}
 
@@ -156,23 +150,14 @@ func (w *WSBackend) handleUnsubscribe(conn *connInfo, topics []string, id *uint6
 func (w *WSBackend) checkTopicList(conn *connInfo, id *uint64, topics []string, mustExist bool) bool {
 	for _, topic := range topics {
 		if _, ok := w.topics[topic]; !ok {
-			conn.RespondWithErr(id, &mskdata.Error{
-				Err:  fmt.Errorf("topic %s is not available", topic),
-				Code: -37000,
-			})
+			conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not available", topic))
 			return false
 		}
 		if _, ok := conn.Subscriptions[topic]; ok != mustExist {
 			if mustExist {
-				conn.RespondWithErr(id, &mskdata.Error{
-					Err:  fmt.Errorf("topic %s is not subscribed", topic),
-					Code: -37000,
-				})
+				conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not subscribed", topic))
 			} else {
-				conn.RespondWithErr(id, &mskdata.Error{
-					Err:  fmt.Errorf("topic %s is already subscribed", topic),
-					Code: -37000,
-				})
+				conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is already subscribed", topic))
 			}
 			return false
 		}
@@ -184,10 +169,7 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 	if method == "ms-subscribe" || method == "ms-unsubscribe" {
 		var topics []string
 		if err := json.Unmarshal(paramData, &topics); err != nil {
-			conn.RespondWithErr(id, &mskdata.Error{
-				Err:  fmt.Errorf("could not parse params as list of topics: %w", err),
-				Code: -37000,
-			})
+			conn.RespondWithErr(id, mskdata.Errorf(-37000, "could not parse params as list of topics: %w", err))
 		}
 		if method == "ms-subscribe" {
 			w.handleSubscribe(conn, topics, id)
@@ -209,17 +191,11 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 	if method == "ms-get" {
 		var topic string
 		if err := json.Unmarshal(paramData, &topic); err != nil {
-			conn.RespondWithErr(id, &mskdata.Error{
-				Err:  fmt.Errorf("could not parse params as a single string (topic): %w", err),
-				Code: -37000,
-			})
+			conn.RespondWithErr(id, mskdata.Errorf(-37000, "could not parse params as a single string (topic): %w", err))
 		}
 		bus, ok := w.topics[topic]
 		if !ok {
-			conn.RespondWithErr(id, &mskdata.Error{
-				Err:  fmt.Errorf("topic %s is not available", topic),
-				Code: -37000,
-			})
+			conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not available", topic))
 		}
 		conn.Respond(id, bus.GetT())
 		return
@@ -227,15 +203,12 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 
 	call, ok := w.calls[method]
 	if !ok {
-		conn.RespondWithErr(id, &mskdata.Error{
-			Err:  fmt.Errorf("no such method: %s", method),
-			Code: -37000,
-		})
+		conn.RespondWithErr(id, mskdata.Errorf(-37000, "no such method: %s", method))
 		return
 	}
-	respData, merr := call(paramData)
-	if merr != nil {
-		conn.RespondWithErr(id, merr)
+	respData, err := call(paramData)
+	if err != nil {
+		conn.RespondWithErr(id, mskdata.GetError(err))
 		return
 	}
 	conn.Respond(id, respData)

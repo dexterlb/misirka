@@ -55,14 +55,14 @@ func AddTopicWith[T any](s *Server, path string, bus *mskbus.BusOf[T]) *TopicMet
 	// TODO: move into http backend
 	info := &topicInfo{}
 	s.topics[path] = info
-	handleCallHttp(s, path, func(args *getArgs) (interface{}, *mskdata.Error) {
+	addCallHTTP(s, path, func(args *getArgs) (interface{}, error) {
 		return bus.GetT(), nil
 	})
 
 	return &TopicMeta[T]{info: info, bus: bus}
 }
 
-type Callee[P any, R any] func(param P) (R, *mskdata.Error)
+type Callee[P any, R any] func(param P) (R, error)
 
 func AddCall[P any, R any](s *Server, path string, callee Callee[P, R]) *CallMeta[P, R] {
 	assertPath(path)
@@ -70,7 +70,7 @@ func AddCall[P any, R any](s *Server, path string, callee Callee[P, R]) *CallMet
 		panic(fmt.Sprintf("AddCall called twice for path %s", path))
 	}
 
-	handler := func(param json.RawMessage) (json.RawMessage, *mskdata.Error) {
+	handler := func(param json.RawMessage) (json.RawMessage, error) {
 		return rawJsonHandler(s, callee, param)
 	}
 
@@ -78,19 +78,16 @@ func AddCall[P any, R any](s *Server, path string, callee Callee[P, R]) *CallMet
 		backend.AddCall(path, handler)
 	}
 
-	call := &callInfo{
-		rawHandler: handler,
-	}
+	call := &callInfo{}
 
 	s.calls[path] = call
-	handleCallHttp(s, path, callee)
+	addCallHTTP(s, path, callee)
 
 	return &CallMeta[P, R]{s: s, info: call, callee: callee}
 }
 
 type callInfo struct {
-	rawHandler (func(json.RawMessage) (json.RawMessage, *mskdata.Error))
-	doc        callDoc
+	doc callDoc
 }
 
 func (s *Server) HTTPHandler() http.Handler {
@@ -145,7 +142,7 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 
 	doc.Validate()
 
-	handleDoc := func(arg struct{}) (*fullDoc, *mskdata.Error) {
+	handleDoc := func(arg struct{}) (*fullDoc, error) {
 		return doc, nil
 	}
 
@@ -154,7 +151,7 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 		panic(fmt.Sprintf("documentation doesn't render, %s", err))
 	}
 
-	handleDocHTMLgz := func(arg struct{}) (*mskdata.RawData, *mskdata.Error) {
+	handleDocHTMLgz := func(arg struct{}) (*mskdata.RawData, error) {
 		return &mskdata.RawData{
 			Data:            bytes.NewReader(htmlgz),
 			MimeType:        "text/html",
@@ -174,7 +171,7 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 	}
 }
 
-func handleCallHttp[P any, R any](s *Server, path string, callee Callee[P, R]) {
+func addCallHTTP[P any, R any](s *Server, path string, callee Callee[P, R]) {
 	fullPath := fmt.Sprintf("/%s", path)
 	s.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		httpCallHandler(s, callee, w, req)
@@ -200,15 +197,15 @@ type topicInfo struct {
 	doc      topicDoc
 }
 
-func rawJsonHandler[P any, R any](s *Server, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, *mskdata.Error) {
+func rawJsonHandler[P any, R any](s *Server, callee Callee[P, R], paramData json.RawMessage) (json.RawMessage, error) {
 	var param P
 
 	err := json.Unmarshal(paramData, &param)
 	if err != nil {
-		return nil, &mskdata.Error{
-			Code: -32700,
-			Err:  fmt.Errorf("could not read request body: %w", err),
-		}
+		return nil, mskdata.Errorf(
+			-32700,
+			"could not read request body: %w", err,
+		)
 	}
 
 	result, merr := callee(param)
@@ -218,10 +215,10 @@ func rawJsonHandler[P any, R any](s *Server, callee Callee[P, R], paramData json
 
 	jdata, err := json.Marshal(result)
 	if err != nil {
-		return nil, &mskdata.Error{
-			Code: -32700,
-			Err:  fmt.Errorf("could not encode response: %w", err),
-		}
+		return nil, mskdata.Errorf(
+			-32700,
+			"could not encode response: %w", err,
+		)
 	}
 
 	return jdata, nil
@@ -235,20 +232,20 @@ func httpCallHandler[P any, R any](s *Server, callee Callee[P, R], w http.Respon
 			paramMap := make(map[string]string)
 			for k, vals := range req.URL.Query() {
 				if len(vals) != 1 {
-					s.writeError(w, &mskdata.Error{
-						Code: -32700,
-						Err:  fmt.Errorf("parameter %s specified more than once, refusing to process", k),
-					})
+					s.writeError(w, mskdata.Errorf(
+						-32700,
+						"parameter %s specified more than once, refusing to process", k,
+					))
 					return
 				}
 				paramMap[k] = vals[0]
 			}
 			err := mskdata.ValsToStruct(paramMap, &param)
 			if err != nil {
-				s.writeError(w, &mskdata.Error{
-					Code: -32700,
-					Err:  fmt.Errorf("could not decode stringmap from URL query: %w", err),
-				})
+				s.writeError(w, mskdata.Errorf(
+					-32700,
+					"could not decode stringmap from URL query: %w", err,
+				))
 				return
 			}
 		}
@@ -262,10 +259,10 @@ func httpCallHandler[P any, R any](s *Server, callee Callee[P, R], w http.Respon
 		dec := json.NewDecoder(req.Body)
 		err := dec.Decode(&param)
 		if err != nil {
-			s.writeError(w, &mskdata.Error{
-				Code: -32700,
-				Err:  fmt.Errorf("could not read request body: %w", err),
-			})
+			s.writeError(w, mskdata.Errorf(
+				-32700,
+				"could not read request body: %w", err,
+			))
 			return
 		}
 		finishHttpCall(s, callee, param, w)
@@ -280,10 +277,10 @@ func httpPathValueCallHandler[P any, R any](s *Server, wildcards []string, calle
 	var param P
 	err := mskdata.ValsToStruct(paramMap, &param)
 	if err != nil {
-		s.writeError(w, &mskdata.Error{
-			Code: -32700,
-			Err:  fmt.Errorf("could not decode stringmap from URL query: %w", err),
-		})
+		s.writeError(w, mskdata.Errorf(
+			-32700,
+			"could not decode stringmap from URL query: %w", err,
+		))
 		return
 	}
 
@@ -291,9 +288,9 @@ func httpPathValueCallHandler[P any, R any](s *Server, wildcards []string, calle
 }
 
 func finishHttpCall[P any, R any](s *Server, callee Callee[P, R], param P, w http.ResponseWriter) {
-	result, merr := callee(param)
-	if merr != nil {
-		s.writeError(w, merr)
+	result, err := callee(param)
+	if err != nil {
+		s.writeError(w, mskdata.GetError(err))
 		return
 	}
 
