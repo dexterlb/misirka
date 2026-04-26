@@ -1,4 +1,4 @@
-package data
+package mskdata
 
 import "testing"
 

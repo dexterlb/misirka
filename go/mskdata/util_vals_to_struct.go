@@ -1,4 +1,4 @@
-package data
+package mskdata
 
 // WARNING: this file was written by an LLM and is probably buggy.
 // At some point it has to be rewritten.

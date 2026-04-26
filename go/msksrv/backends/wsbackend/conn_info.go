@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dexterlb/misirka/go/bus"
-	"github.com/dexterlb/misirka/go/data"
+	"github.com/dexterlb/misirka/go/mskbus"
+	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 )
@@ -26,7 +26,7 @@ func newConnInfo(ws *websocket.Conn, errHandler func(error)) *connInfo {
 }
 
 type subscription struct {
-	Bus   bus.Bus
+	Bus   mskbus.Bus
 	Token uint
 }
 
@@ -41,7 +41,7 @@ func (c *connInfo) UnsubscribeAll() {
 	clear(c.Subscriptions)
 }
 
-func (c *connInfo) Subscribe(topic string, bus bus.Bus) {
+func (c *connInfo) Subscribe(topic string, bus mskbus.Bus) {
 	handler := func(msg interface{}) {
 		c.publishTopicMsg(topic, msg)
 	}
@@ -111,7 +111,7 @@ func (c *connInfo) Respond(id *uint64, result interface{}) {
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
-		c.RespondWithErr(id, &data.Error{
+		c.RespondWithErr(id, &mskdata.Error{
 			Err:  fmt.Errorf("could not encode response: %w", err),
 			Code: -37000,
 		})
@@ -120,7 +120,7 @@ func (c *connInfo) Respond(id *uint64, result interface{}) {
 	c.Send(respBytes)
 }
 
-func (c *connInfo) RespondWithErr(id *uint64, merr *data.Error) {
+func (c *connInfo) RespondWithErr(id *uint64, merr *mskdata.Error) {
 	resp := &rpcError{
 		JsonRPC: "2.0",
 		MErr:    *merr,

@@ -1,4 +1,4 @@
-package server
+package msksrv
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ type exampleCall struct {
 
 func (f *fullDoc) Validate() {
 	if f.APIDescr == "" {
-		panic("Don't be lazy! Set a description on the Misirka object with .Descr(<text>)!")
+		panic("Don't be lazy! Set a description on the Server object with .Descr(<text>)!")
 	}
 
 	for ct, c := range f.Calls {
@@ -79,15 +79,15 @@ func (t *TopicMeta[T]) Example(val any) *TopicMeta[T] {
 	return t
 }
 
-func (m *Misirka) Descr(descr string) *Misirka {
-	m.apiDescr = descr
-	return m
+func (s *Server) Descr(descr string) *Server {
+	s.apiDescr = descr
+	return s
 }
 
 //go:embed doc.html
 var docHTMLTemplate []byte
 
-func (m *Misirka) docHTMLgz(doc *fullDoc) ([]byte, error) {
+func (s *Server) docHTMLgz(doc *fullDoc) ([]byte, error) {
 	funcs := template.FuncMap{
 		"jsonify": func(x interface{}) string {
 			data, err := json.Marshal(x)
