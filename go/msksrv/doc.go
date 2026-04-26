@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"text/template"
 
+	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/goccy/go-json"
 )
 
@@ -53,6 +54,54 @@ func (f *fullDoc) Validate() {
 		if len(t.Examples) == 0 {
 			panic(fmt.Sprintf("Don't be lazy! Set some examples on %s with .Example(<value>)!", tt))
 		}
+	}
+}
+
+func (s *Server) HandleDoc() {
+	s.HandleDocAt("doc", "doc.html")
+}
+
+func (s *Server) HandleDocAt(path string, htmlPath string) {
+	doc := &fullDoc{
+		APIDescr: s.apiDescr,
+		Topics:   make(map[string]*topicDoc),
+		Calls:    make(map[string]*callDoc),
+	}
+	for tp := range s.topics {
+		doc.Topics[tp] = &s.topics[tp].doc
+	}
+	for cp := range s.calls {
+		doc.Calls[cp] = &s.calls[cp].doc
+	}
+
+	doc.Validate()
+
+	handleDoc := func(arg struct{}) (*fullDoc, error) {
+		return doc, nil
+	}
+
+	htmlgz, err := s.docHTMLgz(doc)
+	if err != nil {
+		panic(fmt.Sprintf("documentation doesn't render, %s", err))
+	}
+
+	handleDocHTMLgz := func(arg struct{}) (*mskdata.RawData, error) {
+		return &mskdata.RawData{
+			Data:            bytes.NewReader(htmlgz),
+			MimeType:        "text/html",
+			ContentEncoding: "gzip",
+		}, nil
+	}
+
+	exampleDoc := &fullDoc{APIDescr: "<this documentation>"}
+
+	AddCall(s, path, handleDoc).
+		Descr("get documentation for this API").
+		Example(struct{}{}, exampleDoc)
+
+	if htmlPath != "" {
+		AddCall(s, htmlPath, handleDocHTMLgz).
+			Descr("get documentation for this API in human-readeble HTML")
 	}
 }
 
