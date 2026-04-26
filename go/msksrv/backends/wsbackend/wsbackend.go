@@ -201,12 +201,16 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		return
 	}
 
+	decoder := func(param any) error {
+		return json.Unmarshal(paramData, param)
+	}
+
 	call, ok := w.calls[method]
 	if !ok {
 		conn.RespondWithErr(id, mskdata.Errorf(-37000, "no such method: %s", method))
 		return
 	}
-	respData, err := call(paramData)
+	respData, err := call(decoder)
 	if err != nil {
 		conn.RespondWithErr(id, mskdata.GetError(err))
 		return
