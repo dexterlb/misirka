@@ -1,4 +1,4 @@
-package misirka
+package data
 
 // WARNING: this file was written by an LLM and is probably buggy.
 // At some point it has to be rewritten.
@@ -24,7 +24,7 @@ type typeInfo struct {
 
 var typeCache sync.Map
 
-func valsToStruct[P any](vm map[string]string, p *P) error {
+func ValsToStruct[P any](vm map[string]string, p *P) error {
 	var zero P
 	t := reflect.TypeOf(zero)
 	info, ok := typeCache.Load(t)

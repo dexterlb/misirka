@@ -1,4 +1,4 @@
-package misirka
+package data
 
 import "testing"
 
@@ -68,7 +68,7 @@ var t5 = map[string]string{
 func TestValsToStruct(t *testing.T) {
 	t.Run("t1 basic case", func(t *testing.T) {
 		var f foo
-		err := valsToStruct(t1, &f)
+		err := ValsToStruct(t1, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -94,7 +94,7 @@ func TestValsToStruct(t *testing.T) {
 
 	t.Run("t2 with quotes and negatives", func(t *testing.T) {
 		var f foo
-		err := valsToStruct(t2, &f)
+		err := ValsToStruct(t2, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -120,7 +120,7 @@ func TestValsToStruct(t *testing.T) {
 
 	t.Run("t3 missing fields and nan", func(t *testing.T) {
 		var f foo
-		err := valsToStruct(t3, &f)
+		err := ValsToStruct(t3, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestValsToStruct(t *testing.T) {
 
 	t.Run("t4 unknown field error", func(t *testing.T) {
 		var f foo
-		err := valsToStruct(t4, &f)
+		err := ValsToStruct(t4, &f)
 		if err == nil {
 			t.Fatal("expected error for unknown field, got nil")
 		}
@@ -148,7 +148,7 @@ func TestValsToStruct(t *testing.T) {
 
 	t.Run("t5 bool as 1/0", func(t *testing.T) {
 		var f foo
-		err := valsToStruct(t5, &f)
+		err := ValsToStruct(t5, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -165,7 +165,7 @@ func isNaN(f float32) bool {
 func TestValsToStructPointers(t *testing.T) {
 	t.Run("t1p all fields provided", func(t *testing.T) {
 		var f fooPtr
-		err := valsToStruct(t1, &f)
+		err := ValsToStruct(t1, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -191,7 +191,7 @@ func TestValsToStructPointers(t *testing.T) {
 
 	t.Run("t3p missing fields are nil", func(t *testing.T) {
 		var f fooPtr
-		err := valsToStruct(t3, &f)
+		err := ValsToStruct(t3, &f)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -1,4 +1,4 @@
-package misirka
+package data
 
 import (
 	"bytes"

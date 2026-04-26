@@ -1,4 +1,4 @@
-package misirka
+package data
 
 import (
 	"fmt"
@@ -6,15 +6,15 @@ import (
 	"github.com/goccy/go-json"
 )
 
-type MErr struct {
+type Error struct {
 	Code int32
 	Err  error
 }
 
-func (m MErr) MarshalJSON() ([]byte, error) {
+func (e *Error) MarshalJSON() ([]byte, error) {
 	var errStr *string
-	if m.Err != nil {
-		s := m.Err.Error()
+	if e.Err != nil {
+		s := e.Err.Error()
 		errStr = &s
 	}
 
@@ -22,11 +22,11 @@ func (m MErr) MarshalJSON() ([]byte, error) {
 		Code int32   `json:"code"`
 		Err  *string `json:"message"`
 	}{
-		Code: m.Code,
+		Code: e.Code,
 		Err:  errStr,
 	})
 }
 
-func (m *MErr) Error() string {
-	return fmt.Sprintf("[code %d] %s", m.Code, m.Err)
+func (e *Error) Error() string {
+	return fmt.Sprintf("[code %d] %s", e.Code, e.Err)
 }

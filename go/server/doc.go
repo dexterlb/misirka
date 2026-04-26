@@ -1,4 +1,4 @@
-package misirka
+package server
 
 import (
 	"bytes"
@@ -69,12 +69,12 @@ func (c *CallMeta[P, R]) Example(param P, result R) *CallMeta[P, R] {
 	return c
 }
 
-func (t *TopicMeta) Descr(descr string) *TopicMeta {
+func (t *TopicMeta[T]) Descr(descr string) *TopicMeta[T] {
 	t.info.doc.Description = descr
 	return t
 }
 
-func (t *TopicMeta) Example(val any) *TopicMeta {
+func (t *TopicMeta[T]) Example(val any) *TopicMeta[T] {
 	t.info.doc.Examples = append(t.info.doc.Examples, val)
 	return t
 }
