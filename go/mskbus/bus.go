@@ -1,6 +1,8 @@
 package mskbus
 
-import "sync"
+import (
+	"sync"
+)
 
 type Bus interface {
 	GetT() interface{}
@@ -44,7 +46,7 @@ func (b *BusOf[T]) Send(x T) {
 
 	for _, applier := range b.appliers {
 		newVal, keep := applier(b.lastVal, x)
-		if keep {
+		if !keep {
 			return
 		}
 		x = newVal
