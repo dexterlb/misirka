@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/goccy/go-json"
@@ -23,12 +22,12 @@ func New(errHandler func(error)) *HTTPBackend {
 	}
 }
 
-func (h *HTTPBackend) AddTopic(path string, bus mskbus.Bus) {
+func (h *HTTPBackend) AddTopic(path string, tinfo *backends.TopicInfo) {
 	getter := func(args *getterArgs, rw func(interface{})) error {
-		bus.UseT(rw)
+		tinfo.Bus.UseT(rw)
 		return nil
 	}
-	h.AddCallR(path, backends.MkCallHandler(getter))
+	h.addCallHandler(path, backends.MkCallHandler(getter))
 
 	// TODO: implement long polling when a specific header is set
 }
@@ -37,23 +36,26 @@ type getterArgs struct {
 	// TODO: do we want getters to be able to want specific stuff?
 }
 
-func (h *HTTPBackend) AddCallR(path string, handler backends.CallHandler) {
+func (h *HTTPBackend) AddCall(path string, call *backends.CallInfo) {
+	h.addCallHandler(path, call.Handler)
+	for _, pva := range call.PathValueAliases {
+		h.addPathValueCallHandler(pva, call.Handler)
+	}
+}
+
+func (h *HTTPBackend) addCallHandler(path string, handler backends.CallHandler) {
 	fullPath := fmt.Sprintf("/%s", path)
 	h.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		h.httpCallHandler(handler, w, req)
 	})
 }
 
-func (h *HTTPBackend) AddPathValueCallHandler(pathWithWildcards string, handler backends.CallHandler) {
+func (h *HTTPBackend) addPathValueCallHandler(pathWithWildcards string, handler backends.CallHandler) {
 	fullPath := fmt.Sprintf("/%s", pathWithWildcards)
 	wildcards := extractWildcards(pathWithWildcards)
 	h.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		h.pathValueCallHandler(wildcards, handler, w, req)
 	})
-}
-
-func (h *HTTPBackend) AddRawHttpHandler(url string, handler http.Handler) {
-	h.mux.Handle(url, handler)
 }
 
 func (h *HTTPBackend) Handler() http.Handler {

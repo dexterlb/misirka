@@ -5,12 +5,23 @@ import (
 
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
+	"github.com/dexterlb/misirka/go/msksrv/doc"
 )
 
 type Backend interface {
-	AddTopic(path string, bus mskbus.Bus)
-	AddCallR(path string, handler CallHandler)
-	AddPathValueCallHandler(pathWithWildcards string, handler CallHandler)
+	AddTopic(path string, info *TopicInfo)
+	AddCall(path string, info *CallInfo)
+}
+
+type CallInfo struct {
+	Doc              doc.CallDoc
+	Handler          CallHandler
+	PathValueAliases []string
+}
+
+type TopicInfo struct {
+	Doc doc.TopicDoc
+	Bus mskbus.Bus
 }
 
 // CallHandler is a callable that operates with opaque values

@@ -2,7 +2,6 @@ package msksrv
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
@@ -13,8 +12,8 @@ type Server struct {
 	errHandler func(error)
 	apiDescr   string
 
-	calls  map[string]*callInfo
-	topics map[string]*topicInfo
+	calls  map[string]*backends.CallInfo
+	topics map[string]*backends.TopicInfo
 
 	backends []backends.Backend
 }
@@ -22,8 +21,8 @@ type Server struct {
 func New(errHandler func(error)) *Server {
 	s := &Server{}
 	s.errHandler = errHandler
-	s.topics = make(map[string]*topicInfo)
-	s.calls = make(map[string]*callInfo)
+	s.topics = make(map[string]*backends.TopicInfo)
+	s.calls = make(map[string]*backends.CallInfo)
 	return s
 }
 
@@ -39,12 +38,8 @@ func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
 func AddTopicWith[T any](s *Server, path string, bus *mskbus.BusOf[T]) *TopicMeta[T] {
 	assertPath(path)
 
-	info := &topicInfo{}
+	info := &backends.TopicInfo{Bus: bus}
 	s.topics[path] = info
-
-	for _, backend := range s.backends {
-		backend.AddTopic(path, bus)
-	}
 
 	return &TopicMeta[T]{info: info, bus: bus}
 }
@@ -75,35 +70,32 @@ func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]
 	}
 
 	handler := backends.MkCallHandler(callee)
+	info := &backends.CallInfo{Handler: handler}
+	s.calls[path] = info
 
+	return &CallMeta[P, R]{s: s, info: info, callee: callee}
+}
+
+// Begin must be called after all calls and topics have been set up
+func (s *Server) Begin() {
 	for _, backend := range s.backends {
-		backend.AddCallR(path, handler)
+		for path, call := range s.calls {
+			backend.AddCall(path, call)
+		}
+		for path, topic := range s.topics {
+			backend.AddTopic(path, topic)
+		}
 	}
-
-	callInfo := &callInfo{handler: handler}
-	s.calls[path] = callInfo
-
-	return &CallMeta[P, R]{s: s, info: callInfo, callee: callee}
-}
-
-type callInfo struct {
-	doc     callDoc
-	handler backends.CallHandler
-}
-
-type topicInfo struct {
-	pubMutex sync.Mutex
-	doc      topicDoc
 }
 
 type CallMeta[P any, R any] struct {
-	info   *callInfo
+	info   *backends.CallInfo
 	s      *Server
 	callee mskdata.CalleeR[P, R]
 }
 
 type TopicMeta[T any] struct {
-	info *topicInfo
+	info *backends.TopicInfo
 	bus  *mskbus.BusOf[T]
 }
 
@@ -114,9 +106,7 @@ func (t *TopicMeta[T]) Bus() *mskbus.BusOf[T] {
 func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R] {
 	// TODO: verify that P is a pointer to a struct and its fields match
 	// the given wildcards (reflect goes brr)
-	for _, backend := range c.s.backends {
-		backend.AddPathValueCallHandler(pathWithWildcards, c.info.handler)
-	}
-	c.info.doc.PathValueAliases = append(c.info.doc.PathValueAliases, pathWithWildcards)
+	c.info.PathValueAliases = append(c.info.PathValueAliases, pathWithWildcards)
+	c.info.Doc.PathValueAliases = append(c.info.Doc.PathValueAliases, pathWithWildcards)
 	return c
 }

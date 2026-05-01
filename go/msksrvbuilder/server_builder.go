@@ -109,6 +109,8 @@ func (m *MainLoop) Run() error {
 		m.addDocs(&m.cfg.Doc)
 	}
 
+	m.srv.Begin()
+
 	if m.httpMux != nil {
 		return m.listenHTTP()
 	}
@@ -128,6 +130,11 @@ func (m *MainLoop) listenHTTP() error {
 
 func (m *MainLoop) Server() *msksrv.Server {
 	return m.srv
+}
+
+func (m *MainLoop) AddRawHttpHandler(url string, handler http.Handler) {
+	m.wantHTTP()
+	m.httpMux.Handle(url, handler)
 }
 
 func (m *MainLoop) addHTTPBackend(cfg *HTTPBackendBuildConfig) {

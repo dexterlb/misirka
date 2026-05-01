@@ -7,7 +7,6 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/gorilla/websocket"
@@ -21,29 +20,29 @@ var upgrader = websocket.Upgrader{
 
 type WSBackend struct {
 	opMutex    sync.Mutex
-	topics     map[string]mskbus.Bus
-	calls      map[string]backends.CallHandler
+	topics     map[string]*backends.TopicInfo
+	calls      map[string]*backends.CallInfo
 	errHandler func(error)
 }
 
 func New(errHandler func(error)) *WSBackend {
 	return &WSBackend{
-		topics:     make(map[string]mskbus.Bus),
-		calls:      make(map[string]backends.CallHandler),
+		topics:     make(map[string]*backends.TopicInfo),
+		calls:      make(map[string]*backends.CallInfo),
 		errHandler: errHandler,
 	}
 }
 
-func (w *WSBackend) AddTopic(path string, bus mskbus.Bus) {
+func (w *WSBackend) AddTopic(path string, tinfo *backends.TopicInfo) {
 	w.opMutex.Lock()
 	defer w.opMutex.Unlock()
-	w.topics[path] = bus
+	w.topics[path] = tinfo
 }
 
-func (w *WSBackend) AddCallR(path string, handler backends.CallHandler) {
+func (w *WSBackend) AddCall(path string, call *backends.CallInfo) {
 	w.opMutex.Lock()
 	defer w.opMutex.Unlock()
-	w.calls[path] = handler
+	w.calls[path] = call
 }
 
 func (w *WSBackend) WSHTTPHandler() http.Handler {
@@ -130,7 +129,7 @@ func (w *WSBackend) handleSubscribe(conn *connInfo, topics []string, id *uint64)
 	}
 
 	for _, topic := range topics {
-		conn.Subscribe(topic, w.topics[topic])
+		conn.Subscribe(topic, w.topics[topic].Bus)
 	}
 
 	conn.Respond(id, "ok")
@@ -201,11 +200,11 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		if err := json.Unmarshal(paramData, &topic); err != nil {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "could not parse params as a single string (topic): %w", err))
 		}
-		bus, ok := w.topics[topic]
+		tinfo, ok := w.topics[topic]
 		if !ok {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not available", topic))
 		}
-		bus.UseT(respond)
+		tinfo.Bus.UseT(respond)
 		return
 	}
 
@@ -218,7 +217,7 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		conn.RespondWithErr(id, mskdata.Errorf(-37000, "no such method: %s", method))
 		return
 	}
-	err := call(decoder, respond)
+	err := call.Handler(decoder, respond)
 	if err != nil {
 		conn.RespondWithErr(id, mskdata.GetError(err))
 		return
