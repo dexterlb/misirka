@@ -6,6 +6,7 @@ import (
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
+	"github.com/dexterlb/misirka/go/msksrv/doc"
 )
 
 type Server struct {
@@ -16,6 +17,9 @@ type Server struct {
 	topics map[string]*backends.TopicInfo
 
 	begun bool
+
+	docWanted bool
+	doc       *doc.RenderedDoc
 
 	backends []backends.Backend
 }
@@ -85,6 +89,12 @@ func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]
 func (s *Server) Begin() {
 	s.assertNotBegun()
 	s.begun = true
+
+	err := s.buildDocIfNeeded()
+	if err != nil {
+		panic(fmt.Sprintf("could not build documentation: %s", err))
+	}
+
 	for _, backend := range s.backends {
 		for path, call := range s.calls {
 			backend.AddCall(path, call)

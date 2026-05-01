@@ -3,7 +3,6 @@ package msksrv
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 
 	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/doc"
@@ -15,6 +14,41 @@ func (s *Server) HandleDoc() {
 
 func (s *Server) HandleDocAt(path string, htmlPath string) {
 	s.assertNotBegun()
+	s.docWanted = true
+
+	exampleDoc := &doc.FullDoc{APIDescr: "<this documentation>"}
+
+	AddCall(s, path, s.docHandler).
+		Descr("get documentation for this API").
+		Example(struct{}{}, exampleDoc)
+
+	if htmlPath != "" {
+		AddCall(s, htmlPath, s.docHTMLgzHandler).
+			Descr("get documentation for this API in human-readeble HTML").
+			Example(struct{}{}, s.htmlGzData([]byte("<gzipped HTML documentation>")))
+	}
+}
+
+func (s *Server) docHandler(arg struct{}) (*doc.FullDoc, error) {
+	return s.doc.Doc, nil
+}
+
+func (s *Server) docHTMLgzHandler(arg struct{}) (*mskdata.RawData, error) {
+	return s.htmlGzData(s.doc.HTMLgz), nil
+}
+func (s *Server) htmlGzData(data []byte) *mskdata.RawData {
+	return &mskdata.RawData{
+		Data:            bytes.NewReader(data),
+		MimeType:        "text/html",
+		ContentEncoding: "gzip",
+	}
+}
+
+func (s *Server) buildDocIfNeeded() error {
+	if !s.docWanted {
+		return nil
+	}
+
 	fullDoc := &doc.FullDoc{
 		APIDescr: s.apiDescr,
 		Topics:   make(map[string]*doc.TopicDoc),
@@ -27,35 +61,13 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 		fullDoc.Calls[cp] = &s.calls[cp].Doc
 	}
 
-	fullDoc.Validate()
-
-	handleDoc := func(arg struct{}) (*doc.FullDoc, error) {
-		return fullDoc, nil
-	}
-
-	htmlgz, err := fullDoc.HTMLgz()
+	rd, err := fullDoc.Render()
 	if err != nil {
-		panic(fmt.Sprintf("documentation doesn't render, %s", err))
+		return err
 	}
 
-	handleDocHTMLgz := func(arg struct{}) (*mskdata.RawData, error) {
-		return &mskdata.RawData{
-			Data:            bytes.NewReader(htmlgz),
-			MimeType:        "text/html",
-			ContentEncoding: "gzip",
-		}, nil
-	}
-
-	exampleDoc := &doc.FullDoc{APIDescr: "<this documentation>"}
-
-	AddCall(s, path, handleDoc).
-		Descr("get documentation for this API").
-		Example(struct{}{}, exampleDoc)
-
-	if htmlPath != "" {
-		AddCall(s, htmlPath, handleDocHTMLgz).
-			Descr("get documentation for this API in human-readeble HTML")
-	}
+	s.doc = rd
+	return nil
 }
 
 func (c *CallMeta[P, R]) Descr(descr string) *CallMeta[P, R] {
