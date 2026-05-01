@@ -14,6 +14,7 @@ func (s *Server) HandleDoc() {
 }
 
 func (s *Server) HandleDocAt(path string, htmlPath string) {
+	s.assertNotBegun()
 	fullDoc := &doc.FullDoc{
 		APIDescr: s.apiDescr,
 		Topics:   make(map[string]*doc.TopicDoc),
@@ -58,11 +59,13 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 }
 
 func (c *CallMeta[P, R]) Descr(descr string) *CallMeta[P, R] {
+	c.s.assertNotBegun()
 	c.info.Doc.Description = descr
 	return c
 }
 
 func (c *CallMeta[P, R]) Example(param P, result R) *CallMeta[P, R] {
+	c.s.assertNotBegun()
 	c.info.Doc.ExampleCalls = append(c.info.Doc.ExampleCalls, doc.ExampleCall{
 		Param:  param,
 		Result: result,
@@ -71,16 +74,19 @@ func (c *CallMeta[P, R]) Example(param P, result R) *CallMeta[P, R] {
 }
 
 func (t *TopicMeta[T]) Descr(descr string) *TopicMeta[T] {
+	t.s.assertNotBegun()
 	t.info.Doc.Description = descr
 	return t
 }
 
 func (t *TopicMeta[T]) Example(val any) *TopicMeta[T] {
+	t.s.assertNotBegun()
 	t.info.Doc.Examples = append(t.info.Doc.Examples, val)
 	return t
 }
 
 func (s *Server) Descr(descr string) *Server {
+	s.assertNotBegun()
 	s.apiDescr = descr
 	return s
 }

@@ -15,6 +15,8 @@ type Server struct {
 	calls  map[string]*backends.CallInfo
 	topics map[string]*backends.TopicInfo
 
+	begun bool
+
 	backends []backends.Backend
 }
 
@@ -27,6 +29,7 @@ func New(errHandler func(error)) *Server {
 }
 
 func (s *Server) AddBackend(b backends.Backend) {
+	s.assertNotBegun()
 	s.backends = append(s.backends, b)
 }
 
@@ -36,15 +39,16 @@ func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
 }
 
 func AddTopicWith[T any](s *Server, path string, bus *mskbus.BusOf[T]) *TopicMeta[T] {
+	s.assertNotBegun()
 	assertPath(path)
 
 	info := &backends.TopicInfo{Bus: bus}
 	s.topics[path] = info
 
-	return &TopicMeta[T]{info: info, bus: bus}
+	return &TopicMeta[T]{info: info, bus: bus, s: s}
 }
 
-// AddCallR registers a callable at the given path. The returned result must not
+// AddCall registers a callable at the given path. The returned result must not
 // be modified after it has been returned.
 func AddCall[P any, R any](s *Server, path string, callee mskdata.Callee[P, R]) *CallMeta[P, R] {
 	cr := func(param P, respond func(R)) error {
@@ -64,6 +68,7 @@ func AddCall[P any, R any](s *Server, path string, callee mskdata.Callee[P, R]) 
 // where such a guarantee is not needed, use `AddCall` instead. Do not call `respond()`
 // if returning a non-nil error.
 func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]) *CallMeta[P, R] {
+	s.assertNotBegun()
 	assertPath(path)
 	if _, ok := s.calls[path]; ok {
 		panic(fmt.Sprintf("AddCall called twice for path %s", path))
@@ -78,6 +83,8 @@ func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]
 
 // Begin must be called after all calls and topics have been set up
 func (s *Server) Begin() {
+	s.assertNotBegun()
+	s.begun = true
 	for _, backend := range s.backends {
 		for path, call := range s.calls {
 			backend.AddCall(path, call)
@@ -96,6 +103,7 @@ type CallMeta[P any, R any] struct {
 
 type TopicMeta[T any] struct {
 	info *backends.TopicInfo
+	s    *Server
 	bus  *mskbus.BusOf[T]
 }
 
@@ -104,9 +112,16 @@ func (t *TopicMeta[T]) Bus() *mskbus.BusOf[T] {
 }
 
 func (c *CallMeta[P, R]) PathValueAlias(pathWithWildcards string) *CallMeta[P, R] {
+	c.s.assertNotBegun()
 	// TODO: verify that P is a pointer to a struct and its fields match
 	// the given wildcards (reflect goes brr)
 	c.info.PathValueAliases = append(c.info.PathValueAliases, pathWithWildcards)
 	c.info.Doc.PathValueAliases = append(c.info.Doc.PathValueAliases, pathWithWildcards)
 	return c
+}
+
+func (s *Server) assertNotBegun() {
+	if s.begun {
+		panic("you cannot do this after having called Begin()")
+	}
 }
