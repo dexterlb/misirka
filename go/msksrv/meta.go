@@ -85,6 +85,16 @@ func (c *CallMeta[P, R]) Example(param P, result R) *CallMeta[P, R] {
 	return c
 }
 
+// Async specifies whether this call should be handled in the main server
+// goroutine (synchronous) or in its own goroutine (asynchronous). Async
+// calls can happen in parallel. Some backends guarante order of execution
+// of synchronous calls, but other backends like the HTTP backend have no
+// notion of "synchronous", so for them all calls are effectively async.
+func (c *CallMeta[P, R]) Async(async bool) *CallMeta[P, R] {
+	c.info.Async = async
+	return c
+}
+
 func (t *TopicMeta[T]) Descr(descr string) *TopicMeta[T] {
 	t.s.assertNotBegun()
 	t.info.Doc.Description = descr

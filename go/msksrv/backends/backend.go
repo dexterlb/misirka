@@ -17,6 +17,7 @@ type CallInfo struct {
 	Doc              doc.CallDoc
 	Handler          CallHandler
 	PathValueAliases []string
+	Async            bool
 }
 
 type TopicInfo struct {

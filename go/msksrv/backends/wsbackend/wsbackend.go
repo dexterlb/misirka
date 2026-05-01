@@ -217,9 +217,18 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		conn.RespondWithErr(id, mskdata.Errorf(-37000, "no such method: %s", method))
 		return
 	}
-	err := call.Handler(decoder, respond)
-	if err != nil {
-		conn.RespondWithErr(id, mskdata.GetError(err))
-		return
+
+	handle := func() {
+		err := call.Handler(decoder, respond)
+		if err != nil {
+			conn.RespondWithErr(id, mskdata.GetError(err))
+			return
+		}
+	}
+
+	if call.Async {
+		go handle()
+	} else {
+		handle()
 	}
 }

@@ -21,6 +21,8 @@ type Server struct {
 	docWanted bool
 	doc       *doc.RenderedDoc
 
+	asyncByDefault bool
+
 	backends []backends.Backend
 }
 
@@ -79,7 +81,7 @@ func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]
 	}
 
 	handler := backends.MkCallHandler(callee)
-	info := &backends.CallInfo{Handler: handler}
+	info := &backends.CallInfo{Handler: handler, Async: s.asyncByDefault}
 	s.calls[path] = info
 
 	return &CallMeta[P, R]{s: s, info: info, callee: callee}
@@ -103,6 +105,13 @@ func (s *Server) Begin() {
 			backend.AddTopic(path, topic)
 		}
 	}
+}
+
+// AsyncByDefault sets the asyncness of calls added by subsequent
+// AddCall's
+func (s *Server) AsyncByDefault(async bool) *Server {
+	s.asyncByDefault = async
+	return s
 }
 
 type CallMeta[P any, R any] struct {
