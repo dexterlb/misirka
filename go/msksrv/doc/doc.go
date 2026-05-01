@@ -11,6 +11,7 @@ import (
 )
 
 type FullDoc struct {
+	APIName  string               `json:"name"`
 	APIDescr string               `json:"description"`
 	Calls    map[string]*CallDoc  `json:"calls"`
 	Topics   map[string]*TopicDoc `json:"topics"`
@@ -37,6 +38,10 @@ type docCache struct {
 }
 
 func (f *FullDoc) Validate() error {
+	if f.APIName == "" {
+		return fmt.Errorf("Don't be lazy! Set a name on the Server object with .Name(<text>)!")
+	}
+
 	if f.APIDescr == "" {
 		return fmt.Errorf("Don't be lazy! Set a description on the Server object with .Descr(<text>)!")
 	}

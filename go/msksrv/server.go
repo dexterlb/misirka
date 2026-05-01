@@ -11,7 +11,6 @@ import (
 
 type Server struct {
 	errHandler func(error)
-	apiDescr   string
 
 	calls  map[string]*backends.CallInfo
 	topics map[string]*backends.TopicInfo
@@ -20,6 +19,8 @@ type Server struct {
 
 	docWanted bool
 	doc       *doc.RenderedDoc
+	apiDescr  string
+	apiName   string
 
 	asyncByDefault bool
 

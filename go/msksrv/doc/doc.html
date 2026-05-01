@@ -383,7 +383,7 @@
   {{/* ── SIDEBAR ── */}}
   <aside>
     <div class="sidebar-logo">
-      <h1>Fazant</h1>
+      <h1>{{ .APIName }}</h1>
     </div>
 
     {{if .Calls}}
@@ -411,10 +411,9 @@
     {{/* ── HERO ── */}}
     <section class="hero">
       <span class="tag">API Documentation</span>
-      <h2>API Reference</h2>
-      {{if .APIDescr}}
+      <h2>{{ .APIName }}</h2>
       <p>{{.APIDescr}}</p>
-      {{end}}
+      <p class="misirka-notice">This is a <a href="https://github.com/dexterlb/misirka">Misirka</a>-based API that is available over multiple protocols.</p>
     </section>
 
     {{/* ── CALLS ── */}}

@@ -16,7 +16,12 @@ func (s *Server) HandleDocAt(path string, htmlPath string) {
 	s.assertNotBegun()
 	s.docWanted = true
 
-	exampleDoc := &doc.FullDoc{APIDescr: "<this documentation>"}
+	exampleDoc := &doc.FullDoc{
+		APIName:  s.apiName,
+		APIDescr: "<this documentation>",
+		Calls:    map[string]*doc.CallDoc{},
+		Topics:   map[string]*doc.TopicDoc{},
+	}
 
 	AddCall(s, path, s.docHandler).
 		Descr("get documentation for this API").
@@ -50,6 +55,7 @@ func (s *Server) buildDocIfNeeded() error {
 	}
 
 	fullDoc := &doc.FullDoc{
+		APIName:  s.apiName,
 		APIDescr: s.apiDescr,
 		Topics:   make(map[string]*doc.TopicDoc),
 		Calls:    make(map[string]*doc.CallDoc),
@@ -110,5 +116,11 @@ func (t *TopicMeta[T]) Example(val any) *TopicMeta[T] {
 func (s *Server) Descr(descr string) *Server {
 	s.assertNotBegun()
 	s.apiDescr = descr
+	return s
+}
+
+func (s *Server) Name(name string) *Server {
+	s.assertNotBegun()
+	s.apiName = name
 	return s
 }
