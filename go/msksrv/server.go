@@ -49,7 +49,26 @@ func AddTopicWith[T any](s *Server, path string, bus *mskbus.BusOf[T]) *TopicMet
 	return &TopicMeta[T]{info: info, bus: bus}
 }
 
+// AddCallR registers a callable at the given path. The returned result must not
+// be modified after it has been returned.
 func AddCall[P any, R any](s *Server, path string, callee mskdata.Callee[P, R]) *CallMeta[P, R] {
+	cr := func(param P, respond func(R)) error {
+		result, err := callee(param)
+		if err != nil {
+			return err
+		}
+		respond(result)
+		return nil
+	}
+	return AddCallR(s, path, cr)
+}
+
+// AddCallR registers a callable at the given path. The callable is passed a `respond`
+// callback that can be used to respond with the result. When `respond()` finishes,
+// the result is guaranteed to no longer be used and can be recycled. For cases
+// where such a guarantee is not needed, use `AddCall` instead. Do not call `respond()`
+// if returning a non-nil error.
+func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]) *CallMeta[P, R] {
 	assertPath(path)
 	if _, ok := s.calls[path]; ok {
 		panic(fmt.Sprintf("AddCall called twice for path %s", path))
@@ -58,7 +77,7 @@ func AddCall[P any, R any](s *Server, path string, callee mskdata.Callee[P, R]) 
 	handler := backends.MkCallHandler(callee)
 
 	for _, backend := range s.backends {
-		backend.AddCall(path, handler)
+		backend.AddCallR(path, handler)
 	}
 
 	callInfo := &callInfo{handler: handler}
@@ -80,7 +99,7 @@ type topicInfo struct {
 type CallMeta[P any, R any] struct {
 	info   *callInfo
 	s      *Server
-	callee mskdata.Callee[P, R]
+	callee mskdata.CalleeR[P, R]
 }
 
 type TopicMeta[T any] struct {

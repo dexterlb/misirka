@@ -24,10 +24,11 @@ func New(errHandler func(error)) *HTTPBackend {
 }
 
 func (h *HTTPBackend) AddTopic(path string, bus mskbus.Bus) {
-	getter := func(args *getterArgs) (interface{}, error) {
-		return bus.GetT(), nil
+	getter := func(args *getterArgs, rw func(interface{})) error {
+		bus.UseT(rw)
+		return nil
 	}
-	h.AddCall(path, backends.MkCallHandler(getter))
+	h.AddCallR(path, backends.MkCallHandler(getter))
 
 	// TODO: implement long polling when a specific header is set
 }
@@ -36,7 +37,7 @@ type getterArgs struct {
 	// TODO: do we want getters to be able to want specific stuff?
 }
 
-func (h *HTTPBackend) AddCall(path string, handler backends.CallHandler) {
+func (h *HTTPBackend) AddCallR(path string, handler backends.CallHandler) {
 	fullPath := fmt.Sprintf("/%s", path)
 	h.mux.HandleFunc(fullPath, func(w http.ResponseWriter, req *http.Request) {
 		h.httpCallHandler(handler, w, req)
@@ -57,34 +58,6 @@ func (h *HTTPBackend) AddRawHttpHandler(url string, handler http.Handler) {
 
 func (h *HTTPBackend) Handler() http.Handler {
 	return h.mux
-}
-
-func (h *HTTPBackend) rawJsonHandler(handler backends.CallHandler, paramData json.RawMessage) (json.RawMessage, error) {
-	decoder := func(param any) error {
-		err := json.Unmarshal(paramData, param)
-		if err != nil {
-			return mskdata.Errorf(
-				-32700,
-				"could not read request body: %w", err,
-			)
-		}
-		return nil
-	}
-
-	result, merr := handler(decoder)
-	if merr != nil {
-		return nil, merr
-	}
-
-	jdata, err := json.Marshal(result)
-	if err != nil {
-		return nil, mskdata.Errorf(
-			-32700,
-			"could not encode response: %w", err,
-		)
-	}
-
-	return jdata, nil
 }
 
 func (h *HTTPBackend) httpCallHandler(handler backends.CallHandler, w http.ResponseWriter, req *http.Request) {
@@ -156,32 +129,34 @@ func (h *HTTPBackend) pathValueCallHandler(wildcards []string, handler backends.
 }
 
 func (h *HTTPBackend) finishHttpCall(handler backends.CallHandler, decoder backends.ParamDecoder, w http.ResponseWriter) {
-	result, err := handler(decoder)
+	respond := func(result interface{}) {
+		if raw, ok := any(result).(*mskdata.RawData); ok {
+			if raw.MimeType != "" {
+				w.Header().Set("Content-Type", raw.MimeType)
+			}
+			if raw.ContentEncoding != "" {
+				w.Header().Set("Content-Encoding", raw.ContentEncoding)
+			}
+			_, err := io.Copy(w, raw.Data)
+			if err != nil {
+				h.errHandler(fmt.Errorf("could not write raw data response: %w", err))
+				return
+			}
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			enc := json.NewEncoder(w)
+			err := enc.Encode(result)
+			if err != nil {
+				h.writeError(w, mskdata.Errorf(-32700, "could not write json response: %w", err))
+				return
+			}
+		}
+	}
+
+	err := handler(decoder, respond)
 	if err != nil {
 		h.writeError(w, mskdata.GetError(err))
 		return
-	}
-
-	if raw, ok := any(result).(*mskdata.RawData); ok {
-		if raw.MimeType != "" {
-			w.Header().Set("Content-Type", raw.MimeType)
-		}
-		if raw.ContentEncoding != "" {
-			w.Header().Set("Content-Encoding", raw.ContentEncoding)
-		}
-		_, err := io.Copy(w, raw.Data)
-		if err != nil {
-			h.errHandler(fmt.Errorf("could not write raw data response: %w", err))
-			return
-		}
-	} else {
-		w.Header().Set("Content-Type", "application/json")
-		enc := json.NewEncoder(w)
-		err := enc.Encode(result)
-		if err != nil {
-			h.errHandler(fmt.Errorf("could not write json response: %w", err))
-			return
-		}
 	}
 }
 

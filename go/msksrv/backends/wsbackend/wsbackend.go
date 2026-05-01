@@ -40,7 +40,7 @@ func (w *WSBackend) AddTopic(path string, bus mskbus.Bus) {
 	w.topics[path] = bus
 }
 
-func (w *WSBackend) AddCall(path string, handler backends.CallHandler) {
+func (w *WSBackend) AddCallR(path string, handler backends.CallHandler) {
 	w.opMutex.Lock()
 	defer w.opMutex.Unlock()
 	w.calls[path] = handler
@@ -184,11 +184,15 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		return
 	}
 
+	respond := func(x interface{}) {
+		conn.Respond(id, x)
+	}
+
 	if method == "ms-ping" {
 		if paramData == nil {
 			paramData = []byte("\"pong\"")
 		}
-		conn.Respond(id, json.RawMessage(paramData))
+		respond(json.RawMessage(paramData))
 		return
 	}
 
@@ -201,7 +205,7 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		if !ok {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not available", topic))
 		}
-		conn.Respond(id, bus.GetT())
+		bus.UseT(respond)
 		return
 	}
 
@@ -214,10 +218,9 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		conn.RespondWithErr(id, mskdata.Errorf(-37000, "no such method: %s", method))
 		return
 	}
-	respData, err := call(decoder)
+	err := call(decoder, respond)
 	if err != nil {
 		conn.RespondWithErr(id, mskdata.GetError(err))
 		return
 	}
-	conn.Respond(id, respData)
 }
