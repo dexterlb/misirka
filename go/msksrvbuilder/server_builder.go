@@ -1,6 +1,7 @@
 package msksrvbuilder
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,12 +11,14 @@ import (
 
 	"github.com/dexterlb/misirka/go/msksrv"
 	"github.com/dexterlb/misirka/go/msksrv/backends/httpbackend"
+	"github.com/dexterlb/misirka/go/msksrv/backends/mqttbackend"
 	"github.com/dexterlb/misirka/go/msksrv/backends/wsbackend"
 )
 
 type ServerBuildConfig struct {
 	HTTPBackend HTTPBackendBuildConfig `yaml:"http"`
 	WSBackend   WSBackendBuildConfig   `yaml:"ws"`
+	MQTTBackend MQTTBackendBuildConfig `yaml:"mqtt"`
 	Doc         DocBuildConfig         `yaml:"doc"`
 }
 
@@ -34,6 +37,11 @@ type DocBuildConfig struct {
 	Enable   bool   `yaml:"enable"`
 	Path     string `yaml:"path"`
 	HTMLPath string `yaml:"html_path"`
+}
+
+type MQTTBackendBuildConfig struct {
+	mqttbackend.Cfg `yaml:",inline"`
+	Enable          bool `yaml:"enable"`
 }
 
 var DefaultServerBuildConfig = ServerBuildConfig{
@@ -93,6 +101,10 @@ func BuildServer(errHandler func(error), cfg *ServerBuildConfig) (*msksrv.Server
 		ml.addWSBackend(&cfg.WSBackend)
 	}
 
+	if cfg.MQTTBackend.Enable {
+		ml.addMQTTBackend(&cfg.MQTTBackend)
+	}
+
 	return ml.srv, ml
 }
 
@@ -101,6 +113,7 @@ type MainLoop struct {
 	errHandler   func(error)
 	httpBindAddr string
 	httpMux      *http.ServeMux
+	mqttBackend  *mqttbackend.MQTTBackend
 	cfg          ServerBuildConfig
 }
 
@@ -110,6 +123,13 @@ func (m *MainLoop) Run() error {
 	}
 
 	m.srv.Begin()
+
+	if m.mqttBackend != nil {
+		err := m.mqttBackend.Start(context.TODO())
+		if err != nil {
+			return fmt.Errorf("could not start MQTT backend: %w", err)
+		}
+	}
 
 	if m.httpMux != nil {
 		return m.listenHTTP()
@@ -155,6 +175,13 @@ func (m *MainLoop) addWSBackend(cfg *WSBackendBuildConfig) {
 	m.httpMux.Handle(cfg.URL, wb.WSHTTPHandler())
 
 	m.srv.AddBackend(wb)
+}
+
+func (m *MainLoop) addMQTTBackend(cfg *MQTTBackendBuildConfig) {
+	mb := mqttbackend.New(&cfg.Cfg, m.errHandlerFor("mqtt backend"))
+
+	m.srv.AddBackend(mb)
+	m.mqttBackend = mb
 }
 
 func (m *MainLoop) addDocs(cfg *DocBuildConfig) {
