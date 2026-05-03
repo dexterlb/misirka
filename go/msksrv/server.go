@@ -47,7 +47,7 @@ func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
 
 func AddTopicWith[T any](s *Server, path string, bus *mskbus.BusOf[T]) *TopicMeta[T] {
 	s.assertNotBegun()
-	assertPath(path)
+	s.assertPath(path)
 
 	info := &backends.TopicInfo{Bus: bus}
 	s.topics[path] = info
@@ -76,7 +76,7 @@ func AddCall[P any, R any](s *Server, path string, callee mskdata.Callee[P, R]) 
 // if returning a non-nil error.
 func AddCallR[P any, R any](s *Server, path string, callee mskdata.CalleeR[P, R]) *CallMeta[P, R] {
 	s.assertNotBegun()
-	assertPath(path)
+	s.assertPath(path)
 	if _, ok := s.calls[path]; ok {
 		panic(fmt.Sprintf("AddCall called twice for path %s", path))
 	}
