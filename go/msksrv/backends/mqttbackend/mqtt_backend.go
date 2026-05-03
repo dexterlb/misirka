@@ -16,13 +16,13 @@ type Cfg struct {
 }
 
 type MQTTBackend struct {
-	cfg        *Cfg
-	errHandler func(error)
-	conn       *autopaho.ConnectionManager
+	cfg         *Cfg
+	evtHandlers backends.EventHandlers
+	conn        *autopaho.ConnectionManager
 }
 
-func New(cfg *Cfg, errHandler func(error)) *MQTTBackend {
-	m := &MQTTBackend{cfg: cfg, errHandler: errHandler}
+func New(cfg *Cfg, evtHandlers backends.EventHandlers) *MQTTBackend {
+	m := &MQTTBackend{cfg: cfg, evtHandlers: evtHandlers}
 
 	return m
 }
@@ -48,6 +48,10 @@ func (m *MQTTBackend) Start(ctx context.Context) error {
 		},
 	}
 
+	m.evtHandlers.Info("Starting MQTT connection", map[string]interface{}{
+		"broker_url": brokerUrl,
+	})
+
 	m.conn, err = autopaho.NewConnection(ctx, cliCfg)
 	if err != nil {
 		return err
@@ -68,7 +72,7 @@ func (m *MQTTBackend) AddCall(path string, call *backends.CallInfo) {
 }
 
 func (m *MQTTBackend) handleConnUp(cm *autopaho.ConnectionManager, connAck *paho.Connack) {
-	fmt.Println("mqtt connection up")
+	m.evtHandlers.Info("MQTT connection up", map[string]interface{}{})
 	// if _, err := cm.Subscribe(context.Background(), &paho.Subscribe{
 	// 	Subscriptions: []paho.SubscribeOptions{
 	// 		{Topic: topic, QoS: 1},
@@ -80,21 +84,25 @@ func (m *MQTTBackend) handleConnUp(cm *autopaho.ConnectionManager, connAck *paho
 }
 func (m *MQTTBackend) handleServerDisconnect(d *paho.Disconnect) {
 	if d.Properties != nil {
-		m.errHandler(fmt.Errorf("server requested disconnect: %s\n", d.Properties.ReasonString))
+		m.errorf("server requested disconnect: %s\n", d.Properties.ReasonString)
 	} else {
-		m.errHandler(fmt.Errorf("server requested disconnect; reason code: %d\n", d.ReasonCode))
+		m.errorf("server requested disconnect; reason code: %d\n", d.ReasonCode)
 	}
 }
 
 func (m *MQTTBackend) handleClientError(err error) {
-	m.errHandler(fmt.Errorf("MQTT client error: %w", err))
+	m.errorf("MQTT client error: %w", err)
 }
 
 func (m *MQTTBackend) handleConnError(err error) {
-	m.errHandler(fmt.Errorf("MQTT connection error: %w", err))
+	m.errorf("MQTT connection error: %w", err)
 }
 
 func (m *MQTTBackend) handleIncomingMsg(pr paho.PublishReceived) (bool, error) {
 	fmt.Printf("received message on topic %s; body: %s (retain: %t)\n", pr.Packet.Topic, pr.Packet.Payload, pr.Packet.Retain)
 	return true, nil
+}
+
+func (m *MQTTBackend) errorf(msg string, args ...any) {
+	m.evtHandlers.Err(fmt.Errorf(msg, args...))
 }

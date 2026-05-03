@@ -11,14 +11,14 @@ import (
 )
 
 type HTTPBackend struct {
-	mux        *http.ServeMux
-	errHandler func(error)
+	mux         *http.ServeMux
+	evtHandlers backends.EventHandlers
 }
 
-func New(errHandler func(error)) *HTTPBackend {
+func New(evtHandlers backends.EventHandlers) *HTTPBackend {
 	return &HTTPBackend{
-		mux:        http.NewServeMux(),
-		errHandler: errHandler,
+		mux:         http.NewServeMux(),
+		evtHandlers: evtHandlers,
 	}
 }
 
@@ -141,7 +141,7 @@ func (h *HTTPBackend) finishHttpCall(handler backends.CallHandler, decoder backe
 			}
 			_, err := io.Copy(w, raw.Data)
 			if err != nil {
-				h.errHandler(fmt.Errorf("could not write raw data response: %w", err))
+				h.errorf("could not write raw data response: %w", err)
 				return
 			}
 		} else {
@@ -168,6 +168,10 @@ func (h *HTTPBackend) writeError(w http.ResponseWriter, merr *mskdata.Error) {
 	enc := json.NewEncoder(w)
 	err := enc.Encode(merr)
 	if err != nil {
-		h.errHandler(fmt.Errorf("could not write error response: %w", err))
+		h.errorf("could not write error response: %w", err)
 	}
+}
+
+func (h *HTTPBackend) errorf(msg string, args ...any) {
+	h.evtHandlers.Err(fmt.Errorf(msg, args...))
 }

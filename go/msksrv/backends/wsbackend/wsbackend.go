@@ -19,17 +19,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type WSBackend struct {
-	opMutex    sync.Mutex
-	topics     map[string]*backends.TopicInfo
-	calls      map[string]*backends.CallInfo
-	errHandler func(error)
+	opMutex     sync.Mutex
+	topics      map[string]*backends.TopicInfo
+	calls       map[string]*backends.CallInfo
+	evtHandlers backends.EventHandlers
 }
 
-func New(errHandler func(error)) *WSBackend {
+func New(evtHandlers backends.EventHandlers) *WSBackend {
 	return &WSBackend{
-		topics:     make(map[string]*backends.TopicInfo),
-		calls:      make(map[string]*backends.CallInfo),
-		errHandler: errHandler,
+		topics:      make(map[string]*backends.TopicInfo),
+		calls:       make(map[string]*backends.CallInfo),
+		evtHandlers: evtHandlers,
 	}
 }
 
@@ -64,12 +64,12 @@ func (w *WSBackend) handleWebsocket(writer http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	conn := newConnInfo(ws, w.errHandler)
+	conn := newConnInfo(ws, w.evtHandlers)
 
 	defer func(conn *connInfo) {
 		err := conn.Cleanup()
 		if err != nil {
-			w.errHandler(fmt.Errorf("cleanup failed: %w", err))
+			w.errorf("cleanup failed: %w", err)
 		}
 	}(conn)
 
@@ -78,7 +78,7 @@ func (w *WSBackend) handleWebsocket(writer http.ResponseWriter, req *http.Reques
 
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				w.errHandler(fmt.Errorf("error reading from websocket: %w", err))
+				w.errorf("error reading from websocket: %w", err)
 			}
 			break
 		}
@@ -231,4 +231,8 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 	} else {
 		handle()
 	}
+}
+
+func (w *WSBackend) errorf(msg string, args ...any) {
+	w.evtHandlers.Err(fmt.Errorf(msg, args...))
 }

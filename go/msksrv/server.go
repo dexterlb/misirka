@@ -10,8 +10,6 @@ import (
 )
 
 type Server struct {
-	errHandler func(error)
-
 	calls  map[string]*backends.CallInfo
 	topics map[string]*backends.TopicInfo
 
@@ -27,9 +25,8 @@ type Server struct {
 	backends []backends.Backend
 }
 
-func New(errHandler func(error)) *Server {
+func New() *Server {
 	s := &Server{}
-	s.errHandler = errHandler
 	s.topics = make(map[string]*backends.TopicInfo)
 	s.calls = make(map[string]*backends.CallInfo)
 	return s

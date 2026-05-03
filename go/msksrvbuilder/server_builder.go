@@ -10,6 +10,7 @@ import (
 	"github.com/goccy/go-yaml"
 
 	"github.com/dexterlb/misirka/go/msksrv"
+	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/dexterlb/misirka/go/msksrv/backends/httpbackend"
 	"github.com/dexterlb/misirka/go/msksrv/backends/mqttbackend"
 	"github.com/dexterlb/misirka/go/msksrv/backends/wsbackend"
@@ -60,7 +61,7 @@ var DefaultServerBuildConfig = ServerBuildConfig{
 	},
 }
 
-func BuildServerFromYaml(errHandler func(error), filename string) (*msksrv.Server, *MainLoop, error) {
+func BuildServerFromYaml(evtHandlers backends.EventHandlers, filename string) (*msksrv.Server, *MainLoop, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not open %s: %s", filename, err)
@@ -81,15 +82,15 @@ func BuildServerFromYaml(errHandler func(error), filename string) (*msksrv.Serve
 		return nil, nil, err
 	}
 
-	srv, ml := BuildServer(errHandler, &cfg)
+	srv, ml := BuildServer(evtHandlers, &cfg)
 	return srv, ml, nil
 }
 
-func BuildServer(errHandler func(error), cfg *ServerBuildConfig) (*msksrv.Server, *MainLoop) {
+func BuildServer(evtHandlers backends.EventHandlers, cfg *ServerBuildConfig) (*msksrv.Server, *MainLoop) {
 	ml := &MainLoop{
 		cfg:          *cfg,
-		errHandler:   errHandler,
-		srv:          msksrv.New(errHandler),
+		evtHandlers:  evtHandlers,
+		srv:          msksrv.New(),
 		httpBindAddr: cfg.HTTPBackend.BindAddress,
 	}
 
@@ -110,7 +111,7 @@ func BuildServer(errHandler func(error), cfg *ServerBuildConfig) (*msksrv.Server
 
 type MainLoop struct {
 	srv          *msksrv.Server
-	errHandler   func(error)
+	evtHandlers  backends.EventHandlers
 	httpBindAddr string
 	httpMux      *http.ServeMux
 	mqttBackend  *mqttbackend.MQTTBackend
@@ -145,6 +146,12 @@ func (m *MainLoop) listenHTTP() error {
 	srv := &http.Server{}
 	srv.Handler = m.httpMux
 	srv.Addr = m.httpBindAddr
+	m.evtHandlers.ForBackend("http").Info(
+		"Starting HTTP server",
+		map[string]interface{}{
+			"bind_addr": srv.Addr,
+		},
+	)
 	return srv.ListenAndServe()
 }
 
@@ -159,7 +166,7 @@ func (m *MainLoop) AddRawHttpHandler(url string, handler http.Handler) {
 
 func (m *MainLoop) addHTTPBackend(cfg *HTTPBackendBuildConfig) {
 	m.wantHTTP()
-	hb := httpbackend.New(m.errHandlerFor("http backend"))
+	hb := httpbackend.New(m.evtHandlers.ForBackend("http"))
 
 	prefix, _ := strings.CutSuffix(cfg.Prefix, "/")
 	prefixSlash := fmt.Sprintf("%s/", prefix)
@@ -170,7 +177,7 @@ func (m *MainLoop) addHTTPBackend(cfg *HTTPBackendBuildConfig) {
 
 func (m *MainLoop) addWSBackend(cfg *WSBackendBuildConfig) {
 	m.wantHTTP()
-	wb := wsbackend.New(m.errHandlerFor("ws backend"))
+	wb := wsbackend.New(m.evtHandlers.ForBackend("ws"))
 
 	m.httpMux.Handle(cfg.URL, wb.WSHTTPHandler())
 
@@ -178,7 +185,7 @@ func (m *MainLoop) addWSBackend(cfg *WSBackendBuildConfig) {
 }
 
 func (m *MainLoop) addMQTTBackend(cfg *MQTTBackendBuildConfig) {
-	mb := mqttbackend.New(&cfg.Cfg, m.errHandlerFor("mqtt backend"))
+	mb := mqttbackend.New(&cfg.Cfg, m.evtHandlers.ForBackend("mqtt"))
 
 	m.srv.AddBackend(mb)
 	m.mqttBackend = mb
@@ -186,10 +193,6 @@ func (m *MainLoop) addMQTTBackend(cfg *MQTTBackendBuildConfig) {
 
 func (m *MainLoop) addDocs(cfg *DocBuildConfig) {
 	m.srv.HandleDocAt(cfg.Path, cfg.HTMLPath)
-}
-
-func (m *MainLoop) errHandlerFor(sub string) func(error) {
-	return func(err error) { fmt.Errorf("[%s] %w", sub, err) }
 }
 
 func (m *MainLoop) wantHTTP() {

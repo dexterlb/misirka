@@ -6,6 +6,7 @@ import (
 
 	"github.com/dexterlb/misirka/go/mskbus"
 	"github.com/dexterlb/misirka/go/mskdata"
+	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 )
@@ -14,14 +15,14 @@ type connInfo struct {
 	WriteMutex    sync.Mutex
 	Subscriptions map[string]subscription
 	WS            *websocket.Conn
-	errHandler    func(error)
+	evtHandlers   backends.EventHandlers
 }
 
-func newConnInfo(ws *websocket.Conn, errHandler func(error)) *connInfo {
+func newConnInfo(ws *websocket.Conn, evtHandlers backends.EventHandlers) *connInfo {
 	return &connInfo{
 		WS:            ws,
 		Subscriptions: make(map[string]subscription),
-		errHandler:    errHandler,
+		evtHandlers:   evtHandlers,
 	}
 }
 
@@ -79,7 +80,7 @@ func (c *connInfo) Send(data []byte) {
 
 	err := c.WS.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
-		c.errHandler(fmt.Errorf("could not write data to websocket: %w", err))
+		c.errorf("could not write data to websocket: %w", err)
 		return
 	}
 }
@@ -96,7 +97,7 @@ func (c *connInfo) publishTopicMsg(topic string, msg interface{}) {
 	}
 	mdata, err := json.Marshal(wsmsg)
 	if err != nil {
-		c.errHandler(fmt.Errorf("could not encode websocket message: %w", err))
+		c.errorf("could not encode websocket message: %w", err)
 		return
 	}
 
@@ -128,8 +129,12 @@ func (c *connInfo) RespondWithErr(id *uint64, merr *mskdata.Error) {
 	}
 	respBytes, err := json.Marshal(resp)
 	if err != nil {
-		c.errHandler(fmt.Errorf("could not encode error: %w", err))
+		c.errorf("could not encode error: %w", err)
 		return
 	}
 	c.Send(respBytes)
+}
+
+func (c *connInfo) errorf(msg string, args ...any) {
+	c.evtHandlers.Err(fmt.Errorf(msg, args...))
 }
