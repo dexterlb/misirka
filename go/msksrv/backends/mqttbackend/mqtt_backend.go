@@ -1,12 +1,15 @@
 package mqttbackend
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 
 	"github.com/goccy/go-json"
 
+	"github.com/dexterlb/misirka/go/mskdata"
 	"github.com/dexterlb/misirka/go/msksrv/backends"
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/paho"
@@ -93,30 +96,33 @@ func (m *MQTTBackend) AddTopic(path string, tinfo *backends.TopicInfo) {
 
 func (m *MQTTBackend) AddCall(path string, call *backends.CallInfo) {
 	path = m.cfg.Prefix + path
-	// implement me
+	m.calls[path] = call
 }
 
-func (m *MQTTBackend) publishOn(path string, data interface{}) {
+func (m *MQTTBackend) publishOn(path string, x any) {
 	if !m.connected {
 		return // all values will be published later, on connect
 	}
 
-	jdata, err := json.Marshal(data)
+	pub := &paho.Publish{
+		QoS:    0,
+		Topic:  path,
+		Retain: true,
+	}
+
+	err := m.encodeInto(x, pub)
 	if err != nil {
-		m.errorf("could not encode message: %w", err)
+		m.errorf("could not encode value on topic %s: %w", path, x)
 		return
 	}
 
-	pub := &paho.Publish{
-		QoS:     0,
-		Topic:   path,
-		Payload: jdata,
-		Retain:  true,
-	}
+	m.publish(pub)
+}
 
-	_, err = m.conn.Publish(m.ctx, pub)
+func (m *MQTTBackend) publish(pub *paho.Publish) {
+	_, err := m.conn.Publish(m.ctx, pub)
 	if err != nil {
-		m.errorf("could not publish message on topic %s: %w", path, err)
+		m.errorf("could not publish message on topic %s: %w", pub.Topic, err)
 		return
 	}
 }
@@ -129,20 +135,131 @@ func (m *MQTTBackend) sendInitialTopicStates() {
 	}
 }
 
+func (m *MQTTBackend) subscribeToCallRequests() {
+	subs := make([]paho.SubscribeOptions, 0, len(m.calls))
+	for path, _ := range m.calls {
+		sub := paho.SubscribeOptions{
+			Topic: path,
+			QoS:   0,
+		}
+		subs = append(subs, sub)
+	}
+
+	_, err := m.conn.Subscribe(m.ctx, &paho.Subscribe{
+		Subscriptions: subs,
+	})
+
+	if err != nil {
+		m.errorf("Could not subscribe to call topics: %w; this is very bad: calls over MQTT will not work", err)
+	}
+}
+
 func (m *MQTTBackend) handleConnUp(cm *autopaho.ConnectionManager, connAck *paho.Connack) {
 	m.evtHandlers.Info("MQTT connection up", map[string]interface{}{})
 	m.connected = true
 	m.sendInitialTopicStates()
 	m.publishOn(m.onlineTopic(), true)
-	// if _, err := cm.Subscribe(context.Background(), &paho.Subscribe{
-	// 	Subscriptions: []paho.SubscribeOptions{
-	// 		{Topic: topic, QoS: 1},
-	// 	},
-	// }); err != nil {
-	// 	fmt.Printf("failed to subscribe (%s). This is likely to mean no messages will be received.", err)
-	// }
-	// fmt.Println("mqtt subscription made")
+	m.subscribeToCallRequests()
 }
+
+func (m *MQTTBackend) handleCall(pr paho.PublishReceived) {
+	respData, err := getRespData(pr)
+	if err != nil {
+		m.evtHandlers.Err(err)
+		return
+	}
+
+	call, ok := m.calls[pr.Packet.Topic]
+	if !ok {
+		m.respondWithErr(respData, mskdata.Errorf(-32700, "no such method: %s", pr.Packet.Topic))
+		return
+	}
+
+	decoder := func(param any) error {
+		if raw, ok := param.(*mskdata.RawData); ok {
+			raw.MimeType = pr.Packet.Properties.ContentType
+			raw.Data = bytes.NewReader(pr.Packet.Payload)
+			return nil
+		} else {
+			return json.Unmarshal(pr.Packet.Payload, param)
+		}
+	}
+
+	respond := func(x any) {
+		m.respond(respData, x)
+	}
+
+	handle := func() {
+		err := call.Handler(decoder, respond)
+		if err != nil {
+			m.respondWithErr(respData, mskdata.GetError(err))
+		}
+	}
+
+	if call.Async {
+		go handle()
+	} else {
+		handle()
+	}
+}
+
+func (m *MQTTBackend) respond(respData *respData, x any) {
+	var pub paho.Publish
+
+	pub.Topic = respData.Topic
+	pub.Properties = &paho.PublishProperties{
+		CorrelationData: []byte(respData.Nonce + ".result"),
+	}
+	pub.Retain = false
+
+	err := m.encodeInto(x, &pub)
+	if err != nil {
+		m.respondWithErr(respData, mskdata.Errorf(-32700, "could not encode value: %w", err))
+		return
+	}
+
+	m.publish(&pub)
+}
+
+func (m *MQTTBackend) respondWithErr(respData *respData, merr *mskdata.Error) {
+	var pub paho.Publish
+
+	pub.Topic = respData.Topic
+	pub.Properties = &paho.PublishProperties{
+		CorrelationData: []byte(respData.Nonce + ".error"),
+	}
+	pub.Retain = false
+
+	err := m.encodeInto(merr, &pub)
+	if err != nil {
+		m.errorf(
+			"could not encode error response (original topic %s) to send on topic %s: %w",
+			respData.CallTopic,
+			respData.Topic,
+			err,
+		)
+		return
+	}
+
+	m.publish(&pub)
+}
+
+func (m *MQTTBackend) encodeInto(x any, pub *paho.Publish) error {
+	if pub.Properties == nil {
+		pub.Properties = &paho.PublishProperties{}
+	}
+
+	var err error
+	if raw, ok := x.(*mskdata.RawData); ok {
+		pub.Properties.ContentType = raw.MimeType
+		pub.Payload, err = io.ReadAll(raw.Data)
+	} else {
+		pub.Properties.ContentType = "application/json"
+		pub.Payload, err = json.Marshal(x)
+	}
+	return err
+}
+
 func (m *MQTTBackend) handleServerDisconnect(d *paho.Disconnect) {
 	m.connected = false
 	if d.Properties != nil {
@@ -162,7 +279,7 @@ func (m *MQTTBackend) handleConnError(err error) {
 }
 
 func (m *MQTTBackend) handleIncomingMsg(pr paho.PublishReceived) (bool, error) {
-	fmt.Printf("received message on topic %s; body: %s (retain: %t)\n", pr.Packet.Topic, pr.Packet.Payload, pr.Packet.Retain)
+	m.handleCall(pr)
 	return true, nil
 }
 

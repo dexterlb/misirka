@@ -12,14 +12,15 @@ type Error struct {
 	Err  error
 }
 
-func GetError(err error) (result *Error) {
-	if !errors.As(err, result) {
-		result = &Error{
+func GetError(err error) *Error {
+	if merr, ok := errors.AsType[*Error](err); ok {
+		return merr
+	} else {
+		return &Error{
 			Code: -32767,
 			Err:  err,
 		}
 	}
-	return
 }
 
 func Errorf(code int32, format string, a ...any) *Error {
