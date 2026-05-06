@@ -173,6 +173,7 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		var topics []string
 		if err := json.Unmarshal(paramData, &topics); err != nil {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "could not parse params as list of topics: %w", err))
+			return
 		}
 		if method == "ms-subscribe" {
 			w.handleSubscribe(conn, topics, id)
@@ -199,10 +200,12 @@ func (w *WSBackend) handleRpcCall(conn *connInfo, method string, paramData []byt
 		var topic string
 		if err := json.Unmarshal(paramData, &topic); err != nil {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "could not parse params as a single string (topic): %w", err))
+			return
 		}
 		tinfo, ok := w.topics[topic]
 		if !ok {
 			conn.RespondWithErr(id, mskdata.Errorf(-37000, "topic %s is not available", topic))
+			return
 		}
 		tinfo.Bus.UseT(respond)
 		return
