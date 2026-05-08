@@ -29,7 +29,7 @@ export class SubClient extends MisirkaClient {
   }
 
   handle_online(val: any) {
-    var filter = this.opts.online_filter
+    let filter = this.opts.online_filter
     if (filter === undefined) {
       filter = (val) => { if (val) { return true } else { return false } }
     }

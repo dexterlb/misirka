@@ -13,7 +13,8 @@ type Error struct {
 }
 
 func GetError(err error) *Error {
-	if merr, ok := errors.AsType[*Error](err); ok {
+	var merr *Error
+	if errors.As(err, &merr) {
 		return merr
 	} else {
 		return &Error{

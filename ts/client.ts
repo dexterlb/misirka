@@ -11,7 +11,7 @@ export abstract class MisirkaConnTracker {
   on_alive(f: () => void): void {
     this.alive_notifiers.push(f)
     if (this.alive()) {
-      f();
+      f()
     }
   }
 
@@ -23,26 +23,26 @@ export abstract class MisirkaConnTracker {
   }
 
   alive(): boolean {
-    return this.is_alive;
+    return this.is_alive
   }
 
   protected notify_alive() {
-    this.is_alive = true;
+    this.is_alive = true
     for (const f of this.alive_notifiers) {
-      f();
+      f()
     }
   }
 
   protected notify_dead() {
-    this.is_alive = false;
+    this.is_alive = false
     for (const f of this.dead_notifiers.reverse()) {
-      f();
+      f()
     }
   }
 
   private is_alive: boolean = false
-  private alive_notifiers: Array<() => void> = new Array()
-  private dead_notifiers: Array<() => void> = new Array()
+  private alive_notifiers: Array<() => void> = []
+  private dead_notifiers: Array<() => void> = []
 }
 
 export type MsgHandlerWithTopic<T> = (topic: string, msg: T) => void
@@ -55,7 +55,7 @@ interface RemovedSubscribers {
 
 export abstract class MisirkaClient extends MisirkaConnTracker {
   async subscribe<T>(topic: string, msg_schema: Schema<T>, handler: MsgHandler<T>): Promise<SubscribeToken> {
-    const [sub] = await this.subscribe_multi([topic], msg_schema, (_, msg) => handler(msg));
+    const [sub] = await this.subscribe_multi([topic], msg_schema, (_, msg) => handler(msg))
     return sub
   }
 

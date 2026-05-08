@@ -33,34 +33,30 @@ type ExampleCall struct {
 	Result interface{} `json:"result"`
 }
 
-type docCache struct {
-	HTMLgz []byte
-}
-
-func (f *FullDoc) Validate() error {
-	if f.APIName == "" {
-		return fmt.Errorf("Don't be lazy! Set a name on the Server object with .Name(<text>)!")
+func (doc *FullDoc) Validate() error {
+	if doc.APIName == "" {
+		return fmt.Errorf("don't be lazy! Set a name on the Server object with .Name(<text>)")
 	}
 
-	if f.APIDescr == "" {
-		return fmt.Errorf("Don't be lazy! Set a description on the Server object with .Descr(<text>)!")
+	if doc.APIDescr == "" {
+		return fmt.Errorf("don't be lazy! Set a description on the Server object with .Descr(<text>)")
 	}
 
-	for ct, c := range f.Calls {
+	for ct, c := range doc.Calls {
 		if c.Description == "" {
-			return (fmt.Errorf("Don't be lazy! Set a description on %s with .Descr(<text>)!", ct))
+			return (fmt.Errorf("don't be lazy! Set a description on %s with .Descr(<text>)", ct))
 		}
 		if len(c.ExampleCalls) == 0 {
-			return (fmt.Errorf("Don't be lazy! Set some examples on %s with .Example(<param>, <result>)", ct))
+			return (fmt.Errorf("don't be lazy! Set some examples on %s with .Example(<param>, <result>)", ct))
 		}
 	}
 
-	for tt, t := range f.Topics {
+	for tt, t := range doc.Topics {
 		if t.Description == "" {
-			return (fmt.Errorf("Don't be lazy! Set a description on %s with .Descr(<text>)!", tt))
+			return (fmt.Errorf("don't be lazy! Set a description on %s with .Descr(<text>)", tt))
 		}
 		if len(t.Examples) == 0 {
-			return (fmt.Errorf("Don't be lazy! Set some examples on %s with .Example(<value>)!", tt))
+			return (fmt.Errorf("don't be lazy! Set some examples on %s with .Example(<value>)", tt))
 		}
 	}
 
@@ -72,17 +68,17 @@ type RenderedDoc struct {
 	HTMLgz []byte
 }
 
-func (f *FullDoc) Render() (*RenderedDoc, error) {
-	err := f.Validate()
+func (doc *FullDoc) Render() (*RenderedDoc, error) {
+	err := doc.Validate()
 	if err != nil {
 		return nil, err
 	}
-	htmlgz, err := f.buildHTMLgz()
+	htmlgz, err := doc.buildHTMLgz()
 	if err != nil {
 		return nil, fmt.Errorf("could not build HTML documentation: %w", err)
 	}
 	return &RenderedDoc{
-		Doc:    f,
+		Doc:    doc,
 		HTMLgz: htmlgz,
 	}, nil
 }

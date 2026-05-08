@@ -135,11 +135,12 @@ func ValsToStruct(vm map[string]string, p any) error {
 			}
 		case reflect.Bool:
 			var b bool
-			if val == "true" || val == "1" {
+			switch val {
+			case "true", "1":
 				b = true
-			} else if val == "false" || val == "0" {
+			case "false", "0":
 				b = false
-			} else {
+			default:
 				parsed, err := strconv.ParseBool(val)
 				if err != nil {
 					return err

@@ -4,7 +4,7 @@ import "testing"
 
 type foo struct {
 	FieldA string  `json:"field_a"`
-	FieldB int64   `json:"field_b",omitempty`
+	FieldB int64   `json:"field_b,omitempty"`
 	FieldC float32 `json:"field_c"`
 	FieldD bool    `json:"field_d"`
 	FieldE uint8   `json:"field_e"`
@@ -13,7 +13,7 @@ type foo struct {
 
 type fooPtr struct {
 	FieldA *string  `json:"field_a"`
-	FieldB *int64   `json:"field_b",omitempty`
+	FieldB *int64   `json:"field_b,omitempty"`
 	FieldC *float32 `json:"field_c"`
 	FieldD *bool    `json:"field_d"`
 	FieldE *uint8   `json:"field_e"`

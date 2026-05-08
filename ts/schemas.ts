@@ -8,7 +8,7 @@ export const OkSchema = {
       throw new Error(`expected "ok" but got ${JSON.stringify(x)}`)
     }
     return "ok"
-  }
+  },
 }
 
 export const BoolSchema = {
@@ -17,5 +17,5 @@ export const BoolSchema = {
       throw new Error(`expected boolean but got ${JSON.stringify(x)}`)
     }
     return x
-  }
+  },
 }

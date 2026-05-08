@@ -32,7 +32,7 @@ type BackendSpecificError struct {
 }
 
 func (b *BackendSpecificError) Error() string {
-	return fmt.Sprintf("[backend %s] %w", b.BackendName, b.Err)
+	return fmt.Sprintf("[backend %s] %s", b.BackendName, b.Err.Error())
 }
 
 func (b *BackendSpecificError) Unwrap() error {

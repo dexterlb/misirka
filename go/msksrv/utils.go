@@ -16,9 +16,9 @@ func (s *Server) assertPath(path string) {
 		panic("path has consecutive slashes: " + path)
 	}
 	if _, ok := s.topics[path]; ok {
-		panic(fmt.Sprintf("path %s is already being used for a topic"))
+		panic(fmt.Sprintf("path %s is already being used for a topic", path))
 	}
 	if _, ok := s.calls[path]; ok {
-		panic(fmt.Sprintf("path %s is already being used for a call"))
+		panic(fmt.Sprintf("path %s is already being used for a call", path))
 	}
 }

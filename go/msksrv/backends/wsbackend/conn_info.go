@@ -50,7 +50,6 @@ func (c *connInfo) Subscribe(topic string, bus mskbus.Bus) {
 		Bus:   bus,
 		Token: bus.SubscribeT(handler),
 	}
-	return
 }
 
 func (c *connInfo) Unsubscribe(topic string) error {

@@ -112,7 +112,7 @@ func (m *MQTTBackend) publishOn(path string, x any) {
 
 	err := m.encodeInto(x, pub)
 	if err != nil {
-		m.errorf("could not encode value on topic %s: %w", path, x)
+		m.errorf("could not encode value on topic %s: %w", path, err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (m *MQTTBackend) sendInitialTopicStates() {
 
 func (m *MQTTBackend) subscribeToCallRequests() {
 	subs := make([]paho.SubscribeOptions, 0, len(m.calls))
-	for path, _ := range m.calls {
+	for path := range m.calls {
 		sub := paho.SubscribeOptions{
 			Topic: path,
 			QoS:   0,
