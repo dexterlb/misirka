@@ -5,5 +5,8 @@
   "exports": {
     ".": "./ts/index.ts"
   },
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "mqtt": "^5.15.1"
+  }
 }

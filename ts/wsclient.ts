@@ -1,6 +1,8 @@
 import { MisirkaClient } from "./client"
 import type { SubscribeToken, MsgHandlerWithTopic } from "./client"
+import type { Resolver, Error } from "./data"
 import { OkSchema } from "./schemas"
+import { SubscriberTracker } from "./subscr_tracker"
 
 interface Request {
   jsonrpc: "2.0";
@@ -19,19 +21,9 @@ interface PubMsg {
   msg: any;
 }
 
-interface Resolver<T> {
-  resolve: (val: T) => void;
-  reject: (err: any) => void;
-}
-
 interface ErrorResult {
   error: Error;
   id?: number;
-}
-
-interface Error {
-  message: string;
-  code: number;
 }
 
 export class WSClient extends MisirkaClient {
@@ -43,34 +35,17 @@ export class WSClient extends MisirkaClient {
   }
 
   async subscribe_unsafe(topics: string[], handler: MsgHandlerWithTopic<any>): Promise<Array<SubscribeToken>> {
-    const tokens: Array<SubscribeToken> = topics.map(topic => { return {
-      topic: topic,
-      id: this.new_id(),
-    }})
-
-    const new_topics = this.add_subscribers(tokens, handler)
-
-    try {
-      await this.call("ms-subscribe", Array.from(new_topics), OkSchema)
-    } catch (err) {
-      // cleanup subscriber handlers in case subscription fails
-      this.remove_subscribers(tokens)
-      throw err
-    }
-
-    return tokens
+    return this.sub_tracker.subscribe(topics, handler, async (new_topics) => {
+      // ms-subscribe must guarantee that it will first send messages on the
+      // newly-subscribed topics and then return
+      await this.call("ms-subscribe", new_topics, OkSchema)
+    })
   }
 
   async unsubscribe(tokens: SubscribeToken[]) {
-    const rem = this.remove_subscribers(tokens)
-
-    try {
-      await this.call("ms-unsubscribe", Array.from(rem.removed_topics), OkSchema)
-    } catch (err) {
-      // oops, we could not unsubscribe
-      this.undo_remove_subscribers(rem)
-      throw err
-    }
+    this.sub_tracker.unsubscribe(tokens, async (removed_topics) => {
+      await this.call("ms-unsubscribe", removed_topics, OkSchema)
+    })
   }
 
   async get_unsafe(topic: string): Promise<any> {
@@ -78,7 +53,7 @@ export class WSClient extends MisirkaClient {
   }
 
   async call_unsafe(method: string, params: any): Promise<any> {
-    const id = this.new_id()
+    const id = this.sub_tracker.new_id()
     try {
       const resp = await this.call_raw({
         jsonrpc: "2.0",
@@ -122,7 +97,7 @@ export class WSClient extends MisirkaClient {
 
     this.ws.onclose = () => {
       setTimeout(() => this.init(), 1000)
-      this.clear_subscribers()
+      this.sub_tracker.clear_subscribers()
       this.notify_dead()
     }
 
@@ -178,14 +153,7 @@ export class WSClient extends MisirkaClient {
   }
 
   private handle_pubmsg(pubmsg: PubMsg) {
-    const subscribers = this.subscribers.get(pubmsg.topic)
-    if (subscribers === undefined) {
-      console.error(`[misirka wsclient] no subscribers for topic ${pubmsg.topic}`)
-      return
-    }
-    for (const sub of subscribers.values()) {
-      sub(pubmsg.topic, pubmsg.msg)
-    }
+    this.sub_tracker.send_msg(pubmsg.topic, pubmsg.msg)
   }
 
   private pop_resp_handler(id: number | undefined): Resolver<Response> | undefined {
@@ -202,15 +170,9 @@ export class WSClient extends MisirkaClient {
     return result
   }
 
-  private new_id(): number {
-    const id = this.last_id
-    this.last_id++
-    return id
-  }
-
   private ws!: WebSocket
   private resp_handlers: Map<number, Resolver<Response>> = new Map()
-  private last_id: number = 0
+  private sub_tracker: SubscriberTracker = new SubscriberTracker()
 }
 
 function parseResponse(data: string): Response | null {

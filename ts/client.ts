@@ -1,10 +1,5 @@
 import type { Schema } from "./schemas"
 
-export interface SubscribeToken {
-  topic: string
-  id: number
-}
-
 export abstract class MisirkaConnTracker {
   // Fired whenever the client connects to the backend.
   // If the client is already connected, the callback fires immediately.
@@ -48,9 +43,9 @@ export abstract class MisirkaConnTracker {
 export type MsgHandlerWithTopic<T> = (topic: string, msg: T) => void
 export type MsgHandler<T> = (msg: T) => void
 
-interface RemovedSubscribers {
-  removals: Array<[SubscribeToken, MsgHandlerWithTopic<any>]>
-  removed_topics: Set<string>
+export interface SubscribeToken {
+  topic: string
+  id: number
 }
 
 export abstract class MisirkaClient extends MisirkaConnTracker {
@@ -82,74 +77,6 @@ export abstract class MisirkaClient extends MisirkaConnTracker {
     const resp = await this.call_unsafe(method, params)
     return resp_schema.parse(resp)
   }
-
-  protected remove_subscribers(tokens: SubscribeToken[]): RemovedSubscribers {
-    const removed_topics = new Set<string>()
-    const removals = new Array<[SubscribeToken, MsgHandlerWithTopic<any>]>
-
-    for (const token of tokens) {
-      const topic_map = this.subscribers.get(token.topic)
-      if (topic_map === undefined) {
-        continue
-      }
-
-      const handler = topic_map.get(token.id)
-      if (handler === undefined) {
-        continue
-      }
-
-      topic_map.delete(token.id)
-      removals.push([token, handler])
-      if (topic_map.size == 0) {
-        this.subscribers.delete(token.topic)
-        removed_topics.add(token.topic)
-      }
-    }
-
-    return {
-      removed_topics: removed_topics,
-      removals: removals,
-    }
-  }
-
-  protected undo_remove_subscribers(rs: RemovedSubscribers) {
-    for (const [token, handler] of rs.removals) {
-      this.add_subscribers([token], handler)
-    }
-  }
-
-  protected add_subscribers(tokens: SubscribeToken[], handler: MsgHandlerWithTopic<any>): Set<string> {
-    const new_topics = new Set<string>()
-    for (const token of tokens) {
-      let topic_subs = this.subscribers.get(token.topic)
-      if (topic_subs === undefined) {
-        topic_subs = new Map()
-        this.subscribers.set(token.topic, topic_subs)
-        new_topics.add(token.topic)
-      }
-      topic_subs.set(token.id, handler)
-    }
-    return new_topics
-  }
-
-  protected clear_subscribers() {
-    this.subscribers = new Map()
-  }
-
-  protected async unsubscribe_all() {
-    const tokens = new Array<SubscribeToken>
-    for (const [topic, subs] of this.subscribers.entries()) {
-      for (const id of subs.keys()) {
-        tokens.push({
-          id: id,
-          topic: topic,
-        })
-      }
-    }
-    await this.unsubscribe(tokens)
-  }
-
-  protected subscribers: Map<string, Map<number, (topic: string, msg: any) => void>> = new Map()
 
   abstract get_unsafe(topic: string): Promise<any>;
   abstract unsubscribe(tokens: SubscribeToken[]): Promise<void>;
