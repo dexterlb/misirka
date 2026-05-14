@@ -129,6 +129,10 @@ export class SubscriberTracker {
     }
   }
 
+  public get_last_msg(topic: string): any | undefined {
+    return this.last_msg.get(topic)
+  }
+
   public new_id(): number {
     const id = this.last_id
     this.last_id++
