@@ -1,6 +1,6 @@
 export { WSClient } from "./wsclient"
 export { MQTTClient } from "./mqttclient"
-export { SubClient } from "./sub_client"
+export { SubClient } from "./subclient"
 
 export { MisirkaClient } from "./client"
 export type { SubscribeToken } from "./client"
