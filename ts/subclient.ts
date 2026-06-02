@@ -17,7 +17,7 @@ export class SubClient extends MisirkaClient {
   init() {
     this.base.on_alive(() => {
       if (this.opts.online_topic !== undefined) {
-        this.base.subscribe_unsafe([this.opts.online_topic], val => this.handle_online(val))
+        this.base.subscribe_unsafe([this.opts.online_topic], (_topic, val) => this.handle_online(val))
       } else {
         this.notify_alive()
       }

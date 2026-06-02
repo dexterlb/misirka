@@ -8,6 +8,8 @@ export interface RemovedSubscribers {
 export type TopicSubscriber = (topics: Array<string>) => Promise<void>
 
 export class SubscriberTracker {
+  constructor() {
+  }
   // Add subscription handlers for the given topics and call f
   // for newly-subscribed topics
   public async subscribe(topics: string[], handler: MsgHandlerWithTopic<any>, f: TopicSubscriber): Promise<Array<SubscribeToken>> {
@@ -18,12 +20,21 @@ export class SubscriberTracker {
 
     const new_topics = this.add_subscribers(tokens, handler)
 
+    const gen = this.generation
+
     try {
+      this.add_dirty_topics(new_topics)
       await f(Array.from(new_topics.values()))
+
+      if (gen != this.generation) {
+        throw new Error('subscribers were cleared (connection died?) while trying to subscribe')
+      }
     } catch (err) {
       // cleanup subscriber handlers in case subscription fails
       this.remove_subscribers(tokens)
       throw err
+    } finally {
+      this.remove_dirty_topics(new_topics)
     }
 
     return tokens
@@ -34,12 +45,22 @@ export class SubscriberTracker {
   public async unsubscribe(tokens: SubscribeToken[], f: TopicSubscriber) {
     const rem = this.remove_subscribers(tokens)
 
+    const gen = this.generation
+
     try {
+      this.add_dirty_topics(rem.removed_topics)
       await f(Array.from(rem.removed_topics.values()))
     } catch (err) {
       // oops, we could not unsubscribe
+      if (gen != this.generation) {
+        // subscribers were cleared anyway, no need to undo
+        return;
+      }
       this.undo_remove_subscribers(rem)
+
       throw err
+    } finally {
+      this.remove_dirty_topics(rem.removed_topics)
     }
   }
 
@@ -65,6 +86,7 @@ export class SubscriberTracker {
   }
 
   public clear_subscribers() {
+    this.generation++
     this.subscribers = new Map()
   }
 
@@ -125,7 +147,11 @@ export class SubscriberTracker {
       return
     }
     for (const sub of subscribers.values()) {
-      sub(topic, msg)
+      try {
+        sub(topic, msg)
+      } catch (err) {
+        console.error(`[misirka] exception while handling message on topic ${topic}: `, err)
+      }
     }
   }
 
@@ -133,13 +159,34 @@ export class SubscriberTracker {
     return this.last_msg.get(topic)
   }
 
-  public new_id(): number {
+  private new_id(): number {
     const id = this.last_id
     this.last_id++
     return id
   }
 
+  private add_dirty_topics(topics: Set<string>) {
+    const common = this.dirty_topics.intersection(topics)
+    if (common.size != 0) {
+      throw new Error(
+        `concurrent subscribe/unsubscribe for the same topic is currently unsupported, but you tried it for these topics: ${JSON.stringify(common)}`
+      )
+    }
+
+    for (const topic of topics) {
+      this.dirty_topics.add(topic)
+    }
+  }
+
+  private remove_dirty_topics(topics: Set<string>) {
+    for (const topic of topics) {
+      this.dirty_topics.delete(topic)
+    }
+  }
+
+  private dirty_topics: Set<string> = new Set()
   private subscribers: Map<string, Map<number, MsgHandlerWithTopic<any>>> = new Map()
   private last_msg: Map<string, any> = new Map()
   private last_id: number = 0
+  private generation: number = 0
 }

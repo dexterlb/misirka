@@ -8,3 +8,11 @@ export function random_string(n: number) {
 
   return text
 }
+
+export function get_timeout(opts: { get_timeout?: number, call_timeout?: number }, timeout?: number) {
+    return timeout ?? opts.get_timeout ?? opts.call_timeout ?? 3000
+}
+
+export function call_timeout(opts: { call_timeout?: number }, timeout?: number) {
+    return timeout ?? opts.call_timeout ?? 5000
+}

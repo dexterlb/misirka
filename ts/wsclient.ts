@@ -1,8 +1,10 @@
 import { MisirkaClient } from "./client"
 import type { SubscribeToken, MsgHandlerWithTopic } from "./client"
-import type { Resolver, Error } from "./data"
+import type { Error } from "./data"
 import { OkSchema } from "./schemas"
 import { SubscriberTracker } from "./subscr_tracker"
+import { CallTracker } from "./call_tracker"
+import { get_timeout, call_timeout } from "./utils"
 
 interface Request {
   jsonrpc: "2.0";
@@ -26,9 +28,16 @@ interface ErrorResult {
   id?: number;
 }
 
+export interface WSClientOpts {
+  ws_url: string,
+  get_timeout?: number,
+  call_timeout?: number,
+  reconnect_period?: number,
+}
+
 export class WSClient extends MisirkaClient {
   constructor(
-    private ws_url: string,
+    private opts: WSClientOpts,
   ) {
     super()
     this.init()
@@ -48,56 +57,33 @@ export class WSClient extends MisirkaClient {
     })
   }
 
-  async get_unsafe(topic: string): Promise<any> {
-    return await this.call_unsafe('ms-get', topic)
+  async get_unsafe(topic: string, timeout?: number): Promise<any> {
+    return await this.call_unsafe('ms-get', topic, get_timeout(this.opts, timeout))
   }
 
-  async call_unsafe(method: string, params: any): Promise<any> {
-    const id = this.sub_tracker.new_id()
-    try {
-      const resp = await this.call_raw({
+  async call_unsafe(method: string, params: any, timeout?: number): Promise<any> {
+    return this.call_tracker.do_call(call_timeout(this.opts, timeout), async (id) => {
+      const req: Request = {
         jsonrpc: "2.0",
         method: method,
         id: id,
         params: params,
-      })
-      return resp.result
-    } finally {
-      this.resp_handlers.delete(id)
-    }
-  }
-
-  private async call_raw(req: Request): Promise<Response> {
-    this.ws.send(JSON.stringify(req))
-
-    return new Promise<Response>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(`Timeout ${req.id}`)
-      }, 2000)
-      this.resp_handlers.set(req.id, {
-        resolve: (x: Response) => {
-          clearTimeout(timeout)
-          resolve(x)
-        },
-        reject: (x: any) => {
-          clearTimeout(timeout)
-          reject(x)
-        },
-      })
+      }
+      this.ws.send(JSON.stringify(req))
     })
   }
 
   private init(): void {
-    this.ws = new WebSocket(this.ws_url)
-    this.resp_handlers = new Map()
+    this.ws = new WebSocket(this.opts.ws_url)
 
     this.ws.onopen = () => {
       this.notify_alive()
     }
 
     this.ws.onclose = () => {
-      setTimeout(() => this.init(), 1000)
+      setTimeout(() => this.init(), this.opts.reconnect_period ?? 1000)
       this.sub_tracker.clear_subscribers()
+      this.call_tracker.clear_calls()
       this.notify_dead()
     }
 
@@ -133,46 +119,27 @@ export class WSClient extends MisirkaClient {
   }
 
   private handle_resp(resp: Response) {
-    const resp_handler = this.pop_resp_handler(resp.id)
-    if (resp_handler !== undefined) {
-      resp_handler.resolve(resp)
-    } else {
-      console.error(
-        `[misirka wsclient] received response ${JSON.stringify(resp)} but I don't have a matching request`,
-      )
-    }
+    this.call_tracker.post_result(resp.id, resp.result)
   }
 
   private handle_err(err: ErrorResult) {
-    const resp_handler = this.pop_resp_handler(err.id)
-    if (resp_handler !== undefined) {
-      resp_handler.reject(err.error)
-    } else {
-      console.error(`[misirka wsclient] received error ${err.error} but I don't have a matching request`)
+    if (err.id === undefined) {
+      console.error(
+        '[misirka wsclient] received generic error on websocket: ',
+        err.error
+      )
+      return
     }
+    this.call_tracker.post_error(err.id, err.error)
   }
 
   private handle_pubmsg(pubmsg: PubMsg) {
     this.sub_tracker.send_msg(pubmsg.topic, pubmsg.msg)
   }
 
-  private pop_resp_handler(id: number | undefined): Resolver<Response> | undefined {
-    if (id === undefined) {
-      return undefined
-    }
-
-    const result = this.resp_handlers.get(id)
-    if (result === undefined) {
-      return undefined
-    }
-    this.resp_handlers.delete(id)
-
-    return result
-  }
-
   private ws!: WebSocket
-  private resp_handlers: Map<number, Resolver<Response>> = new Map()
   private sub_tracker: SubscriberTracker = new SubscriberTracker()
+  private call_tracker: CallTracker = new CallTracker()
 }
 
 function parseResponse(data: string): Response | null {

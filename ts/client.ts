@@ -24,14 +24,22 @@ export abstract class MisirkaConnTracker {
   protected notify_alive() {
     this.is_alive = true
     for (const f of this.alive_notifiers) {
-      f()
+      try {
+        f()
+      } catch (err) {
+        console.error(`[misirka] exception in on_alive(): `, err)
+      }
     }
   }
 
   protected notify_dead() {
     this.is_alive = false
     for (const f of this.dead_notifiers.reverse()) {
-      f()
+      try {
+        f()
+      } catch (err) {
+        console.error(`[misirka] exception in on_dead(): `, err)
+      }
     }
   }
 
@@ -68,18 +76,18 @@ export abstract class MisirkaClient extends MisirkaConnTracker {
     return await this.subscribe_unsafe(topics, raw_handler)
   }
 
-  async get<T>(topic: string, schema: Schema<T>): Promise<T> {
-    const result = await this.get_unsafe(topic)
+  async get<T>(topic: string, schema: Schema<T>, timeout?: number): Promise<T> {
+    const result = await this.get_unsafe(topic, timeout)
     return schema.parse(result)
   }
 
-  async call<T>(method: string, params: any, resp_schema: Schema<T>): Promise<T> {
-    const resp = await this.call_unsafe(method, params)
+  async call<T>(method: string, params: any, resp_schema: Schema<T>, timeout?: number): Promise<T> {
+    const resp = await this.call_unsafe(method, params, timeout)
     return resp_schema.parse(resp)
   }
 
-  abstract get_unsafe(topic: string): Promise<any>;
+  abstract get_unsafe(topic: string, timeout?: number): Promise<any>;
   abstract unsubscribe(tokens: SubscribeToken[]): Promise<void>;
-  abstract call_unsafe(method: string, params: any): Promise<any>;
+  abstract call_unsafe(method: string, params: any, timeout?: number): Promise<any>;
   abstract subscribe_unsafe(topics: string[], handler: MsgHandlerWithTopic<any>): Promise<Array<SubscribeToken>>;
 }
