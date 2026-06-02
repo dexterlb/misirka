@@ -6,7 +6,7 @@
     ".": "./ts/index.ts"
   },
   "type": "module",
-  "devDependencies": {
+  "dependencies": {
     "mqtt": "^5.15.1"
   }
 }
