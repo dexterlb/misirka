@@ -208,7 +208,7 @@ func (m *MQTTBackend) respond(respData *respData, x any) {
 
 	pub.Topic = respData.Topic
 	pub.Properties = &paho.PublishProperties{
-		CorrelationData: []byte(respData.Nonce + ".result"),
+		CorrelationData: []byte(respData.Nonce),
 	}
 	pub.Retain = false
 
