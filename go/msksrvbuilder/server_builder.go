@@ -17,32 +17,32 @@ import (
 )
 
 type ServerBuildConfig struct {
-	HTTPBackend HTTPBackendBuildConfig `yaml:"http"`
-	WSBackend   WSBackendBuildConfig   `yaml:"ws"`
-	MQTTBackend MQTTBackendBuildConfig `yaml:"mqtt"`
-	Doc         DocBuildConfig         `yaml:"doc"`
+	HTTPBackend HTTPBackendBuildConfig `yaml:"http",json:"http"`
+	WSBackend   WSBackendBuildConfig   `yaml:"ws",json:"ws"`
+	MQTTBackend MQTTBackendBuildConfig `yaml:"mqtt",json:"mqtt"`
+	Doc         DocBuildConfig         `yaml:"doc",json:"doc"`
 }
 
 type HTTPBackendBuildConfig struct {
-	Enable      bool   `yaml:"enable"`
-	BindAddress string `yaml:"bind"`
-	Prefix      string `yaml:"prefix"`
+	Enable      bool   `yaml:"enable",json:"enable"`
+	BindAddress string `yaml:"bind",json:"bind"`
+	Prefix      string `yaml:"prefix",json:"prefix"`
 }
 
 type WSBackendBuildConfig struct {
-	Enable bool   `yaml:"enable"`
-	URL    string `yaml:"url"`
+	Enable bool   `yaml:"enable",json:"enable"`
+	URL    string `yaml:"url",json:"url"`
 }
 
 type DocBuildConfig struct {
-	Enable   bool   `yaml:"enable"`
-	Path     string `yaml:"path"`
-	HTMLPath string `yaml:"html_path"`
+	Enable   bool   `yaml:"enable",json:"enable"`
+	Path     string `yaml:"path",json:"path"`
+	HTMLPath string `yaml:"html_path",json:"html_path"`
 }
 
 type MQTTBackendBuildConfig struct {
-	mqttbackend.Cfg `yaml:",inline"`
-	Enable          bool `yaml:"enable"`
+	mqttbackend.Cfg `yaml:",inline",json:",inline"`
+	Enable          bool `yaml:"enable",json:"enable"`
 }
 
 var DefaultServerBuildConfig = ServerBuildConfig{
