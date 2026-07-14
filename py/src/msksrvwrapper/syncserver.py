@@ -27,6 +27,9 @@ class MskSrv:
         self._reqs = {}
         self._reqs_lock = threading.Lock()
 
+        # path -> handler, for calls the server forwards back to us
+        self._call_handlers = {}
+
         self._stdin_lock = threading.Lock()
 
         self._ready = threading.Event()
@@ -43,7 +46,18 @@ class MskSrv:
     def set_docs(self, name, descr=""):
         return self._req("set_docs", {"Name": name, "Descr": descr})
 
-    def add_topic(self, path, descr="", examples=None):
+    def add_call_kw(self, path, handler, descr="", examples=None):
+        param_handler = lambda d: handler(**d)
+        self.add_call(path, param_handler, descr, examples)
+
+    def add_call(self, path, handler, descr="", examples=None):
+        self._call_handlers[path] = handler
+        return self._req(
+            "add_call",
+            {"Path": path, "Descr": descr, "Examples": examples or []},
+        )
+
+    def add_topic(self, path, descr, examples):
         return self._req(
             "add_topic",
             {"Path": path, "Descr": descr, "Examples": examples or []},
@@ -144,11 +158,37 @@ class MskSrv:
             print(f"mskpipe: could not parse stdout line: {line!r}", file=sys.stderr)
             return
 
+        if 'method' in msg and 'id' in msg:
+            self._handle_call(msg['id'], msg['method'], msg['params'])
+            return
+
         if 'result' in msg and 'id' in msg:
             self._respond(msg['id'], msg['result'])
             return
 
         print(f"mskpipe: don't know what to do with this: {json.dumps(msg)}", file=sys.stderr)
+
+    def _handle_call(self, req_id, path, param):
+        handler = self._call_handlers.get(path)
+
+        if handler is None:
+            self._reply_call(req_id, error=f"no handler for call {path!r}")
+            return
+
+        try:
+            result = handler(param)
+        except Exception as e:
+            self._reply_call(req_id, error=str(e))
+            return
+
+        self._reply_call(req_id, result=result)
+
+    def _reply_call(self, req_id, result=None, error=None):
+        if error is not None:
+            resp = {"id": req_id, "error": {"code": -37000, "message": error}}
+        else:
+            resp = {"id": req_id, "result": result}
+        self._submit_req(resp)
 
 
     def _forward_stderr(self):
