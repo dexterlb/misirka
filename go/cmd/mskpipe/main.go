@@ -85,7 +85,7 @@ func (p *Piper) HandleInit(cfg *msksrvbuilder.ServerBuildConfig) error {
 	return nil
 }
 
-func (p *Piper) HandleRun(param *struct{}) error {
+func (p *Piper) HandleServe(param *struct{}) error {
 	if p.srv == nil {
 		return fmt.Errorf("server not initialised")
 	}
@@ -157,8 +157,8 @@ func (p *Piper) dispatch(method string, params json.RawMessage, respond func(res
 		jsonHandler(params, &msksrvbuilder.DefaultServerBuildConfig, p.HandleInit, respond)
 	case "set_docs":
 		jsonHandler(params, nil, p.HandleSetDocs, respond)
-	case "run":
-		go jsonHandler(params, nil, p.HandleRun, respond)
+	case "serve":
+		go jsonHandler(params, nil, p.HandleServe, respond)
 	default:
 		respond(nil, mskdata.Errorf(-37000, "no such method: %s", method))
 	}

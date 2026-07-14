@@ -15,13 +15,13 @@ def main():
         },
     )
 
-    srv.start()
-    # the doc endpoint needs a server name/description, set before begin()
-    # srv.set_docs("toy clock", descr="a toy server that publishes the time")
+    srv.open()
+    # the doc endpoint needs a server name/description, set before serve()
+    srv.set_docs("toy clock", descr="a toy server that publishes the time")
     srv.add_topic(
         "clock", descr="the current time", examples=["2026-07-14 13:42:00"]
     )
-    srv.begin()
+    srv.serve()
 
     while True:
         sleep(1)

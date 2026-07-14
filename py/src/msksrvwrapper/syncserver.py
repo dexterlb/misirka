@@ -3,7 +3,7 @@ import subprocess
 import sys
 import threading
 from itertools import count
-from typing import Any, Optional
+from typing import Optional
 
 
 class _Pending:
@@ -16,14 +16,15 @@ class _Pending:
         self.event.set()
 
 
-class MskSrv(threading.Thread):
+class MskSrv:
     def __init__(self, mskpipe_path, server_settings):
-        super().__init__(daemon=True)
         self._mskpipe_path = mskpipe_path
         self._server_settings = server_settings
 
-        self._proc: Optional[subprocess.Popen] = None
-        self._reqs: dict[int, _Pending] = {}
+        self._proc = None   # child mskpipe process
+        self._reader = None # reader thread
+
+        self._reqs = {}
         self._reqs_lock = threading.Lock()
 
         self._stdin_lock = threading.Lock()
@@ -32,8 +33,10 @@ class MskSrv(threading.Thread):
 
         self._ids = count(1)
 
-    def start(self):
-        super().start()
+    def open(self):
+        """Launch the pipe subprocess and initialise the server."""
+        self._reader = threading.Thread(target=self._pump, daemon=True)
+        self._reader.start()
         self._ready.wait()
         self._req("init", self._server_settings)
 
@@ -48,22 +51,28 @@ class MskSrv(threading.Thread):
 
     def publish(self, path, data):
         try:
-            self.publish(path, data)
+            self.publish_or_die(path, data)
         except:
             print(
                 f"mskpipe: failed to publish on {path}",
                 file=sys.stderr,
             )
+
     def publish_or_die(self, path, data):
         return self._req("publish", {"Path": path, "Data": data})
 
-    def begin(self):
+    def serve(self):
         # no need to wait for the result of this request, because it only
         # returns if there has been an error, and that would cause the
         # subprocess to exit anyway
         self._submit_req(
-            {"method": 'run', "params": {}, "id": 0}
+            {"method": "serve", "params": {}, "id": 0}
         )
+
+    def close(self):
+        """Terminate the pipe subprocess."""
+        if self._proc is not None:
+            self._proc.terminate()
 
     def _req(self, method, params = None) -> dict:
         return self._raw_req(
@@ -93,8 +102,7 @@ class MskSrv(threading.Thread):
             self._proc.stdin.write(line + "\n")
             self._proc.stdin.flush()
 
-
-    def run(self):
+    def _pump(self):
         self._proc = subprocess.Popen(
             [self._mskpipe_path],
             stdin=subprocess.PIPE,
