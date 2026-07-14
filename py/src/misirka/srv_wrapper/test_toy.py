@@ -2,7 +2,7 @@ from datetime import datetime
 from time import sleep
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from msksrvwrapper import syncserver
+from misirka.srv_wrapper import syncserver
 
 class Clock:
     def __init__(self):
