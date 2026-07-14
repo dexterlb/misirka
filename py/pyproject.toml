@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ug2cho = "msksrvwrapper.test_toy:main"
+test_toy = "msksrvwrapper.test_toy:main"
 
 [build-system]
 requires = ["hatchling"]

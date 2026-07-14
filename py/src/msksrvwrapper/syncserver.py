@@ -17,43 +17,82 @@ class _Pending:
 
 
 class MskSrv(threading.Thread):
-    def __init__(self, mskpipe_path: str, server_settings: dict()):
+    def __init__(self, mskpipe_path, server_settings):
         super().__init__(daemon=True)
         self._mskpipe_path = mskpipe_path
         self._server_settings = server_settings
 
         self._proc: Optional[subprocess.Popen] = None
-        # req_id -> _Pending, guarded by _reqs_lock
         self._reqs: dict[int, _Pending] = {}
         self._reqs_lock = threading.Lock()
-        # serialises writes to the subprocess' stdin
+
         self._stdin_lock = threading.Lock()
+
+        self._ready = threading.Event()
+
         self._ids = count(1)
 
-    def _req(self, method: str, params: Any = None) -> dict:
+    def start(self):
+        super().start()
+        self._ready.wait()
+        self._req("init", self._server_settings)
+
+    def set_docs(self, name, descr=""):
+        return self._req("set_docs", {"Name": name, "Descr": descr})
+
+    def add_topic(self, path, descr="", examples=None):
+        return self._req(
+            "add_topic",
+            {"Path": path, "Descr": descr, "Examples": examples or []},
+        )
+
+    def publish(self, path, data):
+        try:
+            self.publish(path, data)
+        except:
+            print(
+                f"mskpipe: failed to publish on {path}",
+                file=sys.stderr,
+            )
+    def publish_or_die(self, path, data):
+        return self._req("publish", {"Path": path, "Data": data})
+
+    def begin(self):
+        # no need to wait for the result of this request, because it only
+        # returns if there has been an error, and that would cause the
+        # subprocess to exit anyway
+        self._submit_req(
+            {"method": 'run', "params": {}, "id": 0}
+        )
+
+    def _req(self, method, params = None) -> dict:
         return self._raw_req(
             {"method": method, "params": params, "id": next(self._ids)}
         )
 
-    def _raw_req(self, rpc_req: dict) -> dict:
+    def _raw_req(self, rpc_req):
         req_id = rpc_req["id"]
         pending = _Pending()
         with self._reqs_lock:
             self._reqs[req_id] = pending
 
         try:
-            line = json.dumps(rpc_req)
-            with self._stdin_lock:
-                if self._proc is None or self._proc.stdin is None:
-                    raise RuntimeError("mskpipe process is not running")
-                self._proc.stdin.write(line + "\n")
-                self._proc.stdin.flush()
+            self._submit_req(rpc_req)
 
             pending.event.wait()
             return pending.response
         finally:
             with self._reqs_lock:
                 self._reqs.pop(req_id, None)
+
+    def _submit_req(self, rpc_req):
+        line = json.dumps(rpc_req)
+        with self._stdin_lock:
+            if self._proc is None or self._proc.stdin is None:
+                raise RuntimeError("mskpipe process is not running")
+            self._proc.stdin.write(line + "\n")
+            self._proc.stdin.flush()
+
 
     def run(self):
         self._proc = subprocess.Popen(
@@ -67,6 +106,8 @@ class MskSrv(threading.Thread):
 
         stderr_thread = threading.Thread(target=self._forward_stderr, daemon=True)
         stderr_thread.start()
+
+        self._ready.set()
 
         for line in self._proc.stdout:
             line = line.strip()
@@ -82,7 +123,7 @@ class MskSrv(threading.Thread):
             pending = self._reqs.pop(req_id, None)
         if pending is None:
             print(
-                f"mskpipe: response for unknown req_id {req_id!r}: {line}",
+                f"mskpipe: response for unknown req_id {req_id!r}: {response!r}",
                 file=sys.stderr,
             )
             return
@@ -106,7 +147,7 @@ class MskSrv(threading.Thread):
         assert self._proc is not None and self._proc.stderr is not None
         for line in self._proc.stderr:
             print(
-                f"mskpipe: {line}",
+                f"mskpipe: {line.strip()}",
                 file=sys.stderr,
             )
         sys.stderr.flush()

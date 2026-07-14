@@ -1,0 +1,32 @@
+from time import localtime, sleep, strftime
+
+from msksrvwrapper import syncserver
+
+
+def time_now():
+    return strftime("%Y-%m-%d %H:%M:%S", localtime())
+
+
+def main():
+    srv = syncserver.MskSrv(
+        mskpipe_path="/tmp/mskpipe",
+        server_settings={
+            "http": {"bind": ":8080"},
+        },
+    )
+
+    srv.start()
+    # the doc endpoint needs a server name/description, set before begin()
+    # srv.set_docs("toy clock", descr="a toy server that publishes the time")
+    srv.add_topic(
+        "clock", descr="the current time", examples=["2026-07-14 13:42:00"]
+    )
+    srv.begin()
+
+    while True:
+        sleep(1)
+        srv.publish("clock", time_now())
+
+
+if __name__ == "__main__":
+    main()

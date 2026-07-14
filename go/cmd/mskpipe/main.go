@@ -64,6 +64,19 @@ func (p *Piper) HandlePublish(r *PublishReq) error {
 	return nil
 }
 
+type SetDocsReq struct {
+	Name  string
+	Descr string
+}
+
+func (p *Piper) HandleSetDocs(r *SetDocsReq) error {
+	if p.srv == nil {
+		return fmt.Errorf("server not initialised")
+	}
+	p.srv.Name(r.Name).Descr(r.Descr)
+	return nil
+}
+
 func (p *Piper) HandleInit(cfg *msksrvbuilder.ServerBuildConfig) error {
 	if p.srv != nil {
 		return fmt.Errorf("server already initialised")
@@ -142,6 +155,8 @@ func (p *Piper) dispatch(method string, params json.RawMessage, respond func(res
 		jsonHandler(params, nil, p.HandlePublish, respond)
 	case "init":
 		jsonHandler(params, &msksrvbuilder.DefaultServerBuildConfig, p.HandleInit, respond)
+	case "set_docs":
+		jsonHandler(params, nil, p.HandleSetDocs, respond)
 	case "run":
 		go jsonHandler(params, nil, p.HandleRun, respond)
 	default:
