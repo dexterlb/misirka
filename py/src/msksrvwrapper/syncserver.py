@@ -27,7 +27,6 @@ class MskSrv:
         self._reqs = {}
         self._reqs_lock = threading.Lock()
 
-        # path -> handler, for calls the server forwards back to us
         self._call_handlers = {}
 
         self._stdin_lock = threading.Lock()
@@ -136,7 +135,6 @@ class MskSrv:
             if line:
                 self._handle_stdout_line(line)
 
-        # stdout closed => the process is exiting; unblock anyone still waiting.
         self._proc.wait()
         self._fail_pending()
 
@@ -145,7 +143,7 @@ class MskSrv:
             pending = self._reqs.pop(req_id, None)
         if pending is None:
             print(
-                f"mskpipe: response for unknown req_id {req_id!r}: {response!r}",
+                f"mskpipe: response for unknown req_id {req_id}: {response}",
                 file=sys.stderr,
             )
             return
@@ -155,7 +153,7 @@ class MskSrv:
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
-            print(f"mskpipe: could not parse stdout line: {line!r}", file=sys.stderr)
+            print(f"mskpipe: could not parse stdout line: {line}", file=sys.stderr)
             return
 
         if 'method' in msg and 'id' in msg:
@@ -172,7 +170,7 @@ class MskSrv:
         handler = self._call_handlers.get(path)
 
         if handler is None:
-            self._reply_call(req_id, error=f"no handler for call {path!r}")
+            self._reply_call(req_id, error=f"no handler for call {path}")
             return
 
         try:

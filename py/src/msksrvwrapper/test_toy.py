@@ -1,13 +1,21 @@
-from time import localtime, sleep, strftime
+from datetime import datetime
+from time import sleep
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from msksrvwrapper import syncserver
 
 class Clock:
+    def __init__(self):
+        self._zone = ZoneInfo("UTC")
+
     def time_now(self):
-        return strftime("%Y-%m-%d %H:%M:%S", localtime())
+        return datetime.now(self._zone).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def set_timezone(self, tz):
-        self._timezone = tz
+        try:
+            self._zone = ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(f"unknown timezone: {tz}")
         return 'ok'
 
     def main(self):
@@ -19,10 +27,10 @@ class Clock:
         )
 
         srv.open()
-        # the doc endpoint needs a server name/description, set before serve()
+
         srv.set_docs("toy clock", descr="a toy server that publishes the time")
         srv.add_topic(
-            "clock", descr="the current time", examples=["2026-07-14 13:42:00"]
+            "clock", descr="the current time", examples=["2026-07-14 13:42:00 UTC"]
         )
         srv.add_call_kw(
             "set_timezone",

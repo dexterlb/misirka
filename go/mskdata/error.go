@@ -51,6 +51,24 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (e *Error) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Code    int32   `json:"code"`
+		Message *string `json:"message"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	e.Code = raw.Code
+	if raw.Message != nil {
+		e.Err = errors.New(*raw.Message)
+	} else {
+		e.Err = nil
+	}
+	return nil
+}
+
 func (e *Error) Error() string {
 	return fmt.Sprintf("[code %d] %s", e.Code, e.Err)
 }
