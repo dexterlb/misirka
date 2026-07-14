@@ -43,9 +43,9 @@ type callResult struct {
 }
 
 type AddTopicReq struct {
-	Path     string
-	Descr    string
-	Examples []json.RawMessage
+	Path     string            `json:"path"`
+	Descr    string            `json:"descr"`
+	Examples []json.RawMessage `json:"examples"`
 }
 
 func (p *Piper) HandleAddTopic(r *AddTopicReq) error {
@@ -64,8 +64,8 @@ func (p *Piper) HandleAddTopic(r *AddTopicReq) error {
 }
 
 type PublishReq struct {
-	Path string
-	Data json.RawMessage
+	Path string          `json:"path"`
+	Data json.RawMessage `json:"data"`
 }
 
 func (p *Piper) HandlePublish(r *PublishReq) error {
@@ -78,10 +78,10 @@ func (p *Piper) HandlePublish(r *PublishReq) error {
 }
 
 type AddCallReq struct {
-	Path     string
-	Descr    string
-	IsAsync  bool
-	Examples [][2]json.RawMessage
+	Path     string               `json:"path"`
+	Descr    string               `json:"descr"`
+	IsAsync  bool                 `json:"is_async"`
+	Examples [][2]json.RawMessage `json:"examples"`
 }
 
 func (p *Piper) HandleAddCall(r *AddCallReq) error {
@@ -127,8 +127,8 @@ func (p *Piper) handleCall(path string, param json.RawMessage) (json.RawMessage,
 }
 
 type SetDocsReq struct {
-	Name  string
-	Descr string
+	Name  string `json:"name"`
+	Descr string `json:"descr"`
 }
 
 func (p *Piper) HandleSetDocs(r *SetDocsReq) error {

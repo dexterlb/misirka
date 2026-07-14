@@ -43,7 +43,7 @@ class MskSrv:
         self._req("init", self._server_settings)
 
     def set_docs(self, name, descr=""):
-        return self._req("set_docs", {"Name": name, "Descr": descr})
+        return self._req("set_docs", {"name": name, "descr": descr})
 
     def add_call_kw(self, path, handler, descr="", examples=None):
         param_handler = lambda d: handler(**d)
@@ -53,13 +53,13 @@ class MskSrv:
         self._call_handlers[path] = handler
         return self._req(
             "add_call",
-            {"Path": path, "Descr": descr, "Examples": examples or []},
+            {"path": path, "descr": descr, "examples": examples or []},
         )
 
     def add_topic(self, path, descr, examples):
         return self._req(
             "add_topic",
-            {"Path": path, "Descr": descr, "Examples": examples or []},
+            {"path": path, "descr": descr, "examples": examples or []},
         )
 
     def publish(self, path, data):
@@ -72,7 +72,7 @@ class MskSrv:
             )
 
     def publish_or_die(self, path, data):
-        return self._req("publish", {"Path": path, "Data": data})
+        return self._req("publish", {"path": path, "data": data})
 
     def serve(self):
         # no need to wait for the result of this request, because it only
