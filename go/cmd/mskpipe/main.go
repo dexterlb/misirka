@@ -46,6 +46,7 @@ type AddTopicReq struct {
 	Path     string            `json:"path"`
 	Descr    string            `json:"descr"`
 	Examples []json.RawMessage `json:"examples"`
+	Dedup    bool              `json:"dedup"`
 }
 
 func (p *Piper) HandleAddTopic(r *AddTopicReq) error {
@@ -59,7 +60,14 @@ func (p *Piper) HandleAddTopic(r *AddTopicReq) error {
 		meta.Example(example)
 	}
 
-	p.buses[r.Path] = meta.Bus()
+	bus := meta.Bus()
+	if r.Dedup {
+		bus.DedupBy(func(prev, x json.RawMessage) bool {
+			return bytes.Equal(prev, x)
+		})
+	}
+
+	p.buses[r.Path] = bus
 	return nil
 }
 

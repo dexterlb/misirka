@@ -31,6 +31,7 @@ class Clock:
         srv.set_docs("toy clock", descr="a toy server that publishes the time")
         srv.add_topic(
             "clock", descr="the current time", examples=["2026-07-14 13:42:00 UTC"]
+            dedup=True,
         )
         srv.add_call_kw(
             "set_timezone",

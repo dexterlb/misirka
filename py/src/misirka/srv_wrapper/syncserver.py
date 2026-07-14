@@ -56,10 +56,10 @@ class MskSrv:
             {"path": path, "descr": descr, "examples": examples or []},
         )
 
-    def add_topic(self, path, descr, examples):
+    def add_topic(self, path, descr, examples, dedup=False):
         return self._req(
             "add_topic",
-            {"path": path, "descr": descr, "examples": examples or []},
+            {"path": path, "descr": descr, "examples": examples or [], "dedup": dedup},
         )
 
     def publish(self, path, data):
