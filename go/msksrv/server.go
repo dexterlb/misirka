@@ -38,6 +38,7 @@ func (s *Server) AddBackend(b backends.Backend) {
 }
 
 func AddTopic[T any](s *Server, path string) *TopicMeta[T] {
+	// TODO: all these functions can be converted to methods when go 1.27 is released
 	b := mskbus.New[T]()
 	return AddTopicWith(s, path, b)
 }

@@ -104,7 +104,7 @@ func (c *connInfo) publishTopicMsg(topic string, msg interface{}) {
 }
 
 func (c *connInfo) Respond(id *uint64, result interface{}) {
-	resp := &rpcResponse{
+	resp := &mskdata.RpcResponse{
 		JsonRPC: "2.0",
 		Result:  result,
 		ID:      id,
@@ -121,7 +121,7 @@ func (c *connInfo) Respond(id *uint64, result interface{}) {
 }
 
 func (c *connInfo) RespondWithErr(id *uint64, merr *mskdata.Error) {
-	resp := &rpcError{
+	resp := &mskdata.RpcError{
 		JsonRPC: "2.0",
 		MErr:    *merr,
 		ID:      id,

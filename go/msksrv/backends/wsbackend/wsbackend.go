@@ -87,26 +87,8 @@ func (w *WSBackend) handleWebsocket(writer http.ResponseWriter, req *http.Reques
 	}
 }
 
-type rpcResponse struct {
-	ID      *uint64     `json:"id"`
-	Result  interface{} `json:"result"`
-	JsonRPC string      `json:"jsonrpc"`
-}
-
-type rpcError struct {
-	MErr    mskdata.Error `json:"error"`
-	ID      *uint64       `json:"id"`
-	JsonRPC string        `json:"jsonrpc"`
-}
-
-type rpcRequest struct {
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-	ID     *uint64         `json:"id"`
-}
-
 func (w *WSBackend) handleWebsocketMsg(conn *connInfo, message []byte) {
-	var msg rpcRequest
+	var msg mskdata.RpcRequest
 	if err := json.Unmarshal(message, &msg); err != nil {
 		conn.RespondWithErr(nil, mskdata.Errorf(-37000, "could not decode message: %w", err))
 		return
