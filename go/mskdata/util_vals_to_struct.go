@@ -26,7 +26,7 @@ var typeCache sync.Map
 
 func ValsToStruct(vm map[string]string, p any) error {
 	rv := reflect.ValueOf(p)
-	if rv.Kind() != reflect.Ptr {
+	if rv.Kind() != reflect.Pointer {
 		return &invalidTypeError{kind: rv.Kind().String()}
 	}
 	rv = rv.Elem()
@@ -182,7 +182,7 @@ func cacheType(rt reflect.Type) *typeInfo {
 			continue
 		}
 		ti.knownFields[name] = true
-		isPtr := field.Type.Kind() == reflect.Ptr
+		isPtr := field.Type.Kind() == reflect.Pointer
 		var elemKind reflect.Kind
 		if isPtr {
 			elemKind = field.Type.Elem().Kind()
