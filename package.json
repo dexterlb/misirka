@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "main": "./ts/index.ts",
   "exports": {
-    ".": "./ts/index.ts"
+    ".": "./ts/index.ts",
+    "./websocket": "./ts/wsclient.ts",
+    "./mqtt": "./ts/mqttclient.ts"
   },
   "type": "module",
   "dependencies": {
