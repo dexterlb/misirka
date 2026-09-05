@@ -35,7 +35,7 @@ export interface WSClientOpts {
   reconnect_period?: number,
 }
 
-export class WSClient extends MisirkaClient {
+export default class WSClient extends MisirkaClient {
   constructor(
     private opts: WSClientOpts,
   ) {
