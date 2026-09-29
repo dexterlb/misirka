@@ -1,4 +1,5 @@
 import json
+import queue
 import subprocess
 import sys
 import threading
@@ -17,9 +18,10 @@ class _Pending:
 
 
 class MskSrv:
-    def __init__(self, mskpipe_path, server_settings):
+    def __init__(self, mskpipe_path, server_settings, num_call_threads=1):
         self._mskpipe_path = mskpipe_path
         self._server_settings = server_settings
+        self._num_call_threads = num_call_threads
 
         self._proc = None   # child mskpipe process
         self._reader = None # reader thread
@@ -28,6 +30,7 @@ class MskSrv:
         self._reqs_lock = threading.Lock()
 
         self._call_handlers = {}
+        self._call_queue = queue.Queue()
 
         self._stdin_lock = threading.Lock()
 
@@ -37,8 +40,14 @@ class MskSrv:
 
     def open(self):
         """Launch the pipe subprocess and initialise the server."""
-        self._reader = threading.Thread(target=self._pump, daemon=True)
+        self._reader = threading.Thread(
+            target=self._read_from_stdin, name="msksrv_read_from_stdin", daemon=True
+        )
         self._reader.start()
+        for i in range(self._num_call_threads):
+            threading.Thread(
+                target=self._call_worker, name=f"msksrv_call_{i}", daemon=True
+            ).start()
         self._ready.wait()
         self._req("init", self._server_settings)
 
@@ -64,14 +73,14 @@ class MskSrv:
 
     def publish(self, path, data):
         try:
-            self.publish_or_die(path, data)
+            self.publish_or_perish(path, data)
         except:
             print(
                 f"mskpipe: failed to publish on {path}",
                 file=sys.stderr,
             )
 
-    def publish_or_die(self, path, data):
+    def publish_or_perish(self, path, data):
         return self._req("publish", {"path": path, "data": data})
 
     def serve(self):
@@ -115,7 +124,7 @@ class MskSrv:
             self._proc.stdin.write(line + "\n")
             self._proc.stdin.flush()
 
-    def _pump(self):
+    def _read_from_stdin(self):
         self._proc = subprocess.Popen(
             [self._mskpipe_path],
             stdin=subprocess.PIPE,
@@ -125,7 +134,9 @@ class MskSrv:
             bufsize=1,  # line-buffered
         )
 
-        stderr_thread = threading.Thread(target=self._forward_stderr, daemon=True)
+        stderr_thread = threading.Thread(
+            target=self._forward_stderr, name="msksrv_stderr", daemon=True
+        )
         stderr_thread.start()
 
         self._ready.set()
@@ -157,7 +168,7 @@ class MskSrv:
             return
 
         if 'method' in msg and 'id' in msg:
-            self._handle_call(msg['id'], msg['method'], msg['params'])
+            self._call_queue.put((msg['id'], msg['method'], msg['params']))
             return
 
         if 'result' in msg and 'id' in msg:
@@ -165,6 +176,14 @@ class MskSrv:
             return
 
         print(f"mskpipe: don't know what to do with this: {json.dumps(msg)}", file=sys.stderr)
+
+    def _call_worker(self):
+        while True:
+            req_id, path, param = self._call_queue.get()
+            try:
+                self._handle_call(req_id, path, param)
+            except Exception as e:
+                print(f"mskpipe: call worker failed: {e}", file=sys.stderr)
 
     def _handle_call(self, req_id, path, param):
         handler = self._call_handlers.get(path)
