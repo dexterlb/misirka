@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Misirka", "Misirka\Misirka.csproj", "{5DB21778-15EC-48DA-9719-CEFC85E13714}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Misirka.WsClient", "Misirka.WsClient\Misirka.WsClient.csproj", "{51074175-43C0-436E-890E-A8DBB9F2B969}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Misirka.HttpClient", "Misirka.HttpClient\Misirka.HttpClient.csproj", "{14053A97-5DC6-4135-A5E5-D524DE92AD99}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5DB21778-15EC-48DA-9719-CEFC85E13714}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5DB21778-15EC-48DA-9719-CEFC85E13714}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5DB21778-15EC-48DA-9719-CEFC85E13714}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5DB21778-15EC-48DA-9719-CEFC85E13714}.Release|Any CPU.Build.0 = Release|Any CPU
+		{51074175-43C0-436E-890E-A8DBB9F2B969}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{51074175-43C0-436E-890E-A8DBB9F2B969}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{51074175-43C0-436E-890E-A8DBB9F2B969}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{51074175-43C0-436E-890E-A8DBB9F2B969}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14053A97-5DC6-4135-A5E5-D524DE92AD99}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14053A97-5DC6-4135-A5E5-D524DE92AD99}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14053A97-5DC6-4135-A5E5-D524DE92AD99}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14053A97-5DC6-4135-A5E5-D524DE92AD99}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
