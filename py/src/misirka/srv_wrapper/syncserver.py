@@ -62,7 +62,12 @@ class MskSrv:
         self._call_handlers[path] = handler
         return self._req(
             "add_call",
-            {"path": path, "descr": descr, "examples": examples or []},
+            {
+                "path": path,
+                "descr": descr,
+                "examples": examples or [],
+                "is_async": self._num_call_threads > 1,
+            },
         )
 
     def add_topic(self, path, descr, examples, dedup=False):
