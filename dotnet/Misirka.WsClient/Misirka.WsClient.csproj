@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+        <Nullable>enable</Nullable>
+        <LangVersion>default</LangVersion>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <IsTrimmable>true</IsTrimmable>
+    </PropertyGroup>
+
+    <ItemGroup>
+<!--        <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />-->
+        <PackageReference Include="JetBrains.Annotations" Version="2026.2.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+        <PackageReference Include="System.Text.Json" Version="10.0.12" PrivateAssets="All" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+      <ProjectReference Include="..\Misirka\Misirka.csproj" />
+    </ItemGroup>
+</Project>
