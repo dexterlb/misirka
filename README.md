@@ -1,5 +1,7 @@
 ### misirka
 
+**This repo is archived.** The new location of this project is [git.fosdem.org/video/misirka](https://git.fosdem.org/video/misirka)
+
 `misirka` is an opinionated library for writing realtime control APIs.
 
 **server implementations**:
