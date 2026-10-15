@@ -121,7 +121,7 @@ export default class MQTTClient extends MisirkaClient {
     timeout = get_timeout(this.opts, timeout)
 
     return new Promise((resolve, reject) => {
-      var resolved = false;
+      let resolved = false;
       const handler = (_topic: string, msg: any) => {
         if (resolved) {
           return;
@@ -167,8 +167,8 @@ export default class MQTTClient extends MisirkaClient {
   }
 
   private handle_reply(msg: IPublishPacket) {
-    let payload = JSON.parse(msg.payload.toString('utf-8'))
-    let cd = parse_cdata(msg)
+    const payload = JSON.parse(msg.payload.toString('utf-8'))
+    const cd = parse_cdata(msg)
     if (!cd) {
       console.error(`[misirka mqtt] received reply message with invalid correlation data`)
     } else if (cd.is_err) {
