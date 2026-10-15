@@ -107,7 +107,7 @@ func (t *TopicMeta[T]) Descr(descr string) *TopicMeta[T] {
 	return t
 }
 
-func (t *TopicMeta[T]) Example(val any) *TopicMeta[T] {
+func (t *TopicMeta[T]) Example(val T) *TopicMeta[T] {
 	t.s.assertNotBegun()
 	t.info.Doc.Examples = append(t.info.Doc.Examples, val)
 	return t

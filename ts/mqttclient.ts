@@ -24,7 +24,7 @@ export interface MQTTClientOpts {
   call_timeout?: number,
 }
 
-export class MQTTClient extends MisirkaClient {
+export default class MQTTClient extends MisirkaClient {
   // FIXME: our class being named MQTTClient while MqttClient exists in "mqtt" is kinda bad
   constructor(
     private opts: MQTTClientOpts,
